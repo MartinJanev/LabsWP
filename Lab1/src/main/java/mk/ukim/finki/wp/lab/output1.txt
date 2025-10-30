@@ -1,0 +1,374 @@
+--- Content of ./bootstrap/DataHolder.java ---
+package mk.ukim.finki.wp.lab.bootstrap;
+
+import jakarta.annotation.PostConstruct;
+import mk.ukim.finki.wp.lab.model.Book;
+import mk.ukim.finki.wp.lab.model.BookReservation;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class DataHolder {
+    public static List<Book> books = null;
+    public static List<BookReservation> reservations = null;
+
+    @PostConstruct
+    public void init() {
+        books = new ArrayList<>();
+        reservations = new ArrayList<>();
+
+        books.add(new Book("Thinking, Fast and Slow", "Psychology", 9.0));
+        books.add(new Book("The Art of War", "Strategy", 8.8));
+        books.add(new Book("Sapiens: A Brief History of Humankind", "History", 9.2));
+        books.add(new Book("Atomic Habits", "Self-Help", 9.1));
+        books.add(new Book("The Pragmatic Programmer", "Computer Science", 9.5));
+        books.add(new Book("Clean Code", "Software Engineering", 9.4));
+        books.add(new Book("The Subtle Art of Not Giving a F*ck", "Self-Help", 8.3));
+        books.add(new Book("Meditations", "Philosophy", 8.9));
+        books.add(new Book("Man’s Search for Meaning", "Psychology", 9.3));
+        books.add(new Book("Deep Work", "Productivity", 8.7));
+
+
+    }
+}
+-------------------------
+--- Content of ./Lab1Application.java ---
+package mk.ukim.finki.wp.lab;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.web.servlet.ServletComponentScan;
+
+@SpringBootApplication
+@ServletComponentScan
+public class Lab1Application {
+
+    public static void main(String[] args) {
+        SpringApplication.run(Lab1Application.class, args);
+    }
+
+}
+-------------------------
+--- Content of ./model/Book.java ---
+package mk.ukim.finki.wp.lab.model;
+
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
+public class Book {
+    String title, genre;
+    double averageRating;
+
+}
+-------------------------
+--- Content of ./model/BookReservation.java ---
+package mk.ukim.finki.wp.lab.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
+public class BookReservation {
+    String bookTitle, readerName, readerAddress;
+    Long numberOfCopies;
+}
+-------------------------
+--- Content of ./repository/BookRepository.java ---
+package mk.ukim.finki.wp.lab.repository;
+
+import mk.ukim.finki.wp.lab.model.Book;
+
+import java.util.List;
+
+public interface BookRepository {
+    List<Book> findAll();
+
+    List<Book> searchBooks(String text, Double rating);
+}
+-------------------------
+--- Content of ./repository/BookReservationRepository.java ---
+package mk.ukim.finki.wp.lab.repository;
+
+import mk.ukim.finki.wp.lab.model.BookReservation;
+
+public interface BookReservationRepository {
+    BookReservation save(BookReservation bookReservation);
+
+}
+-------------------------
+--- Content of ./repository/InMemoryBookRepository.java ---
+package mk.ukim.finki.wp.lab.repository;
+
+import mk.ukim.finki.wp.lab.bootstrap.DataHolder;
+import mk.ukim.finki.wp.lab.model.Book;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public class InMemoryBookRepository implements BookRepository {
+    @Override
+    public List<Book> findAll() {
+        return DataHolder.books;
+    }
+
+    @Override
+    public List<Book> searchBooks(String text, Double rating) {
+        return DataHolder.books.stream()
+                .filter(b -> b.getTitle().contains(text)
+                        && b.getAverageRating() >= rating)
+                .toList();
+    }
+}
+-------------------------
+--- Content of ./repository/InMemoryBookReservationRepository.java ---
+package mk.ukim.finki.wp.lab.repository;
+
+import mk.ukim.finki.wp.lab.bootstrap.DataHolder;
+import mk.ukim.finki.wp.lab.model.BookReservation;
+import org.springframework.stereotype.Repository;
+
+import java.util.LinkedList;
+import java.util.List;
+
+@Repository
+public class InMemoryBookReservationRepository implements BookReservationRepository {
+
+
+    @Override
+    public BookReservation save(BookReservation bookReservation) {
+        DataHolder.reservations.removeIf(r -> r.getBookTitle().equals(bookReservation.getBookTitle()));
+        DataHolder.reservations.add(bookReservation);
+        return bookReservation;
+    }
+
+}
+-------------------------
+--- Content of ./service/BookReservationService.java ---
+package mk.ukim.finki.wp.lab.service;
+
+import mk.ukim.finki.wp.lab.model.BookReservation;
+
+public interface BookReservationService {
+    BookReservation placeReservation(String bookTitle,
+                                     String readerName,
+                                     String readerAddress,
+                                     int numberOfCopies);
+}
+-------------------------
+--- Content of ./service/BookReservationServiceImpl.java ---
+package mk.ukim.finki.wp.lab.service;
+
+import mk.ukim.finki.wp.lab.model.BookReservation;
+import mk.ukim.finki.wp.lab.repository.BookReservationRepository;
+import org.springframework.stereotype.Service;
+
+@Service
+public class BookReservationServiceImpl implements BookReservationService {
+
+    private final BookReservationRepository bookReservationRepository;
+
+    public BookReservationServiceImpl(BookReservationRepository bookReservationRepository) {
+        this.bookReservationRepository = bookReservationRepository;
+    }
+
+    @Override
+    public BookReservation placeReservation(String bookTitle, String readerName, String readerAddress, int numberOfCopies) {
+        if (bookTitle == null || bookTitle.isEmpty()
+                || readerName == null || readerName.isEmpty()
+                || readerAddress == null || readerAddress.isEmpty()
+                || numberOfCopies < 0) {
+            throw new IllegalArgumentException();
+        }
+
+        BookReservation reservation = new BookReservation(bookTitle, readerName, readerAddress, (long) numberOfCopies);
+        return this.bookReservationRepository.save(reservation);
+    }
+}
+-------------------------
+--- Content of ./service/BookService.java ---
+package mk.ukim.finki.wp.lab.service;
+
+import mk.ukim.finki.wp.lab.model.Book;
+
+import java.util.List;
+
+public interface BookService {
+    List<Book> listAll();
+
+    List<Book> searchBooks(String text, Double rating);
+}
+-------------------------
+--- Content of ./service/BookServiceImpl.java ---
+package mk.ukim.finki.wp.lab.service;
+
+import mk.ukim.finki.wp.lab.model.Book;
+import mk.ukim.finki.wp.lab.repository.BookRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class BookServiceImpl implements BookService {
+
+    private final BookRepository bookRepository;
+
+    public BookServiceImpl(BookRepository bookRepository) {
+        this.bookRepository = bookRepository;
+    }
+
+    @Override
+    public List<Book> listAll() {
+        return this.bookRepository.findAll();
+    }
+
+    @Override
+    public List<Book> searchBooks(String text, Double rating) {
+        return this.bookRepository.searchBooks(text, rating);
+    }
+}
+-------------------------
+--- Content of ./sk.sh ---
+#!/bin/bash
+
+# Script to print the content of all files in the current directory and its subdirectories
+
+# Find all files and iterate through them
+find . -type f | while read -r file; do
+    echo "--- Content of $file ---" >> output.txt
+    cat "$file" >> output.txt
+    echo "-------------------------" >> output.txt
+done
+-------------------------
+--- Content of ./web/BookListServlet.java ---
+package mk.ukim.finki.wp.lab.web;
+
+import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import mk.ukim.finki.wp.lab.model.Book;
+import mk.ukim.finki.wp.lab.service.BookService;
+import org.thymeleaf.context.WebContext;
+import org.thymeleaf.spring6.SpringTemplateEngine;
+import org.thymeleaf.web.IWebExchange;
+import org.thymeleaf.web.servlet.JakartaServletWebApplication;
+
+import java.io.IOException;
+import java.util.List;
+
+@WebServlet(name = "BookListServlet", urlPatterns = "")
+public class BookListServlet extends HttpServlet {
+    private final SpringTemplateEngine templateEngine;
+    private final BookService bookService;
+
+    public BookListServlet(SpringTemplateEngine templateEngine, BookService bookService) {
+        this.templateEngine = templateEngine;
+        this.bookService = bookService;
+    }
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        IWebExchange webExchange = JakartaServletWebApplication
+                .buildApplication(getServletContext())
+                .buildExchange(req, resp);
+
+        WebContext webContext = new WebContext(webExchange);
+
+        String text = req.getParameter("text");
+        String ratingParam = req.getParameter("rating");
+
+        Double ratingFilter = null;
+        if (ratingParam != null && !ratingParam.isEmpty()) {
+            try {
+                ratingFilter = Double.parseDouble(ratingParam);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
+        List<Book> books;
+
+        if ((text != null && !text.isEmpty()) || ratingFilter != null) {
+            books = bookService.searchBooks(text, ratingFilter);
+        } else {
+            books = bookService.listAll();
+        }
+
+        webContext.setVariable("books", books);
+        webContext.setVariable("searchText", text == null ? "" : text);
+        webContext.setVariable("searchRating", ratingParam == null ? 0 : ratingParam);
+
+        resp.setContentType("text/html; charset=UTF-8");
+        this.templateEngine.process("listBooks.html", webContext, resp.getWriter());
+    }
+
+}
+-------------------------
+--- Content of ./web/BookReservationServlet.java ---
+package mk.ukim.finki.wp.lab.web;
+
+import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import mk.ukim.finki.wp.lab.model.BookReservation;
+import mk.ukim.finki.wp.lab.service.BookReservationService;
+import org.thymeleaf.TemplateEngine;
+import org.thymeleaf.context.WebContext;
+import org.thymeleaf.web.IWebExchange;
+import org.thymeleaf.web.servlet.JakartaServletWebApplication;
+
+import java.io.IOException;
+
+@WebServlet(name = "BookReservationServlet", urlPatterns = "/bookReservation")
+public class BookReservationServlet extends HttpServlet {
+    private final TemplateEngine templateEngine;
+    private final BookReservationService bookReservationService;
+
+    public BookReservationServlet(TemplateEngine templateEngine,
+                                  BookReservationService bookReservationService) {
+        this.templateEngine = templateEngine;
+        this.bookReservationService = bookReservationService;
+    }
+
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        String bookTitle = req.getParameter("bookTitle");
+        String readerName = req.getParameter("readerName");
+        String readerAddress = req.getParameter("readerAddress");
+        String numCopiesStr = req.getParameter("numCopies");
+
+        int numCopies = 1;
+        if (numCopiesStr != null && !numCopiesStr.isEmpty()) {
+            try {
+                numCopies = Integer.parseInt(numCopiesStr);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
+        BookReservation reservation = bookReservationService.placeReservation(
+                bookTitle, readerName, readerAddress, numCopies
+        );
+
+        IWebExchange webExchange = JakartaServletWebApplication
+                .buildApplication(getServletContext())
+                .buildExchange(req, resp);
+        WebContext webContext = new WebContext(webExchange);
+
+        webContext.setVariable("reservation", reservation);
+        webContext.setVariable("clientIp", req.getRemoteAddr());
+
+        resp.setContentType("text/html; charset=UTF-8");
+        templateEngine.process("reservationConfirmation.html", webContext, resp.getWriter());
+    }
+}
+-------------------------
