@@ -13,7 +13,9 @@ import org.thymeleaf.web.IWebExchange;
 import org.thymeleaf.web.servlet.JakartaServletWebApplication;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @WebServlet(name = "BookListServlet", urlPatterns = "")
 public class BookListServlet extends HttpServlet {
@@ -51,8 +53,28 @@ public class BookListServlet extends HttpServlet {
         } else {
             books = bookService.listAll();
         }
-
         webContext.setVariable("books", books);
+
+        String nameOfBook = this.bookService.listAll().get(0).getTitle();
+        int max = 0;
+
+        HashMap<String, Integer> visits = (HashMap<String, Integer>) getServletContext().getAttribute("hashMapBooks");
+
+
+        for (String b : this.bookService.listAll().stream().map(Book::getTitle).toList()) {
+            if (visits.containsKey(b)) {
+                if (visits.get(b) >= max) {
+                    nameOfBook = b;
+                    max = visits.get(b);
+                }
+            }
+        }
+
+
+
+        webContext.setVariable("hashVal", max);
+        webContext.setVariable("bookName", nameOfBook);
+
         webContext.setVariable("searchText", text == null ? "" : text);
         webContext.setVariable("searchRating", ratingParam == null ? 0 : ratingParam);
 

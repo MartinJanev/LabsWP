@@ -13,6 +13,7 @@ import org.thymeleaf.web.IWebExchange;
 import org.thymeleaf.web.servlet.JakartaServletWebApplication;
 
 import java.io.IOException;
+import java.util.HashMap;
 
 @WebServlet(name = "BookReservationServlet", urlPatterns = "/bookReservation")
 public class BookReservationServlet extends HttpServlet {
@@ -41,18 +42,29 @@ public class BookReservationServlet extends HttpServlet {
             }
         }
 
-        BookReservation reservation = bookReservationService.placeReservation(
-                bookTitle, readerName, readerAddress, numCopies
-        );
-
         IWebExchange webExchange = JakartaServletWebApplication
                 .buildApplication(getServletContext())
                 .buildExchange(req, resp);
         WebContext webContext = new WebContext(webExchange);
 
+
+        BookReservation reservation = bookReservationService.placeReservation(
+                bookTitle, readerName, readerAddress, numCopies
+        );
+
+        HashMap<String, Integer> booksMap = (HashMap<String, Integer>) getServletContext().getAttribute("hashMapBooks");
+
+        if (!booksMap.containsKey(bookTitle)) {
+            booksMap.put(bookTitle, 1);
+        } else {
+            booksMap.put(bookTitle, booksMap.get(bookTitle) + 1);
+        }
+
+        getServletContext().setAttribute("hashMapBooks", booksMap);
+        webContext.setVariable("hashMapBooks", booksMap);
+
         webContext.setVariable("reservation", reservation);
         webContext.setVariable("clientIp", req.getRemoteAddr());
-//        webContext.setVariable("lastThree", bookReservationService.getLastThreeReservations());
 
         resp.setContentType("text/html; charset=UTF-8");
         templateEngine.process("reservationConfirmation.html", webContext, resp.getWriter());
