@@ -6,6 +6,6 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 public class BookReservation {
-    String bookTitle, readerName, readerAddress;
-    Long numberOfCopies;
+    private String bookTitle, readerName, readerAddress;
+    private Long numberOfCopies;
 }

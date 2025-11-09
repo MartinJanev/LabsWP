@@ -8,4 +8,12 @@ public interface BookService {
     List<Book> listAll();
 
     List<Book> searchBooks(String text, Double rating);
+
+    Book findById(Long id);
+
+    Book create(String title, String genre, Double avgRating, Long authorId);
+
+    Book update(Long id, String title, String genre, Double avgRating, Long authorId);
+
+    void deleteById(Long id);
 }
