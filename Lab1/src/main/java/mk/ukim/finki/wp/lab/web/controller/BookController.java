@@ -24,11 +24,20 @@ public class BookController {
     @GetMapping
     public String getBooksPage(
             @RequestParam(required = false) String error,
+            @RequestParam(required = false) Long authorId,
             Model model
     ) {
-        List<Book> books = this.bookService.listAll();
+
+        List<Book> books;
+        if (authorId != null) {
+            books = this.bookService.listByAuthor(authorId);
+        } else {
+            books = this.bookService.listAll();
+        }
         model.addAttribute("books", books);
+        model.addAttribute("authors", authorService.findAll());
         model.addAttribute("error", error);
+        model.addAttribute("selectedAuthorId", authorId);
 
         return "listBooks";
     }

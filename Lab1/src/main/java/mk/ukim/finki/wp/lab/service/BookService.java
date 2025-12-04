@@ -16,4 +16,6 @@ public interface BookService {
     Book update(Long id, String title, String genre, Double avgRating, Long authorId);
 
     void deleteById(Long id);
+
+    List<Book> listByAuthor(Long authorId);
 }

@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import mk.ukim.finki.wp.lab.model.Book;
+import mk.ukim.finki.wp.lab.service.AuthorService;
 import mk.ukim.finki.wp.lab.service.BookService;
 import org.thymeleaf.context.WebContext;
 import org.thymeleaf.spring6.SpringTemplateEngine;
@@ -19,10 +20,12 @@ import java.util.List;
 public class BookListServlet extends HttpServlet {
     private final SpringTemplateEngine templateEngine;
     private final BookService bookService;
+    private final AuthorService authorService;
 
-    public BookListServlet(SpringTemplateEngine templateEngine, BookService bookService) {
+    public BookListServlet(SpringTemplateEngine templateEngine, BookService bookService, AuthorService authorService) {
         this.templateEngine = templateEngine;
         this.bookService = bookService;
+        this.authorService = authorService;
     }
 
     @Override
@@ -36,18 +39,19 @@ public class BookListServlet extends HttpServlet {
         String text = req.getParameter("text");
         String ratingParam = req.getParameter("rating");
 
-        Double ratingFilter = null;
+        Double ratingFilter = 0.0; // Default to 0 as fallback
         if (ratingParam != null && !ratingParam.isEmpty()) {
             try {
                 ratingFilter = Double.parseDouble(ratingParam);
             } catch (NumberFormatException ignored) {
+                ratingFilter = 0.0; // Fallback to 0 if parsing fails
             }
         }
 
         List<Book> books;
 
-        if ((text != null && !text.isEmpty()) || ratingFilter != null) {
-            books = bookService.searchBooks(text, ratingFilter);
+        if ((text != null && !text.isEmpty()) || (ratingParam != null && !ratingParam.isEmpty())) {
+            books = bookService.searchBooks(text == null ? "" : text, ratingFilter);
         } else {
             books = bookService.listAll();
         }
@@ -55,6 +59,8 @@ public class BookListServlet extends HttpServlet {
 
         webContext.setVariable("searchText", text == null ? "" : text);
         webContext.setVariable("searchRating", ratingParam == null ? 0 : ratingParam);
+        webContext.setVariable("authors", authorService.findAll());
+        webContext.setVariable("selectedAuthorId", null);
 
         resp.setContentType("text/html; charset=UTF-8");
         this.templateEngine.process("listBooks.html", webContext, resp.getWriter());

@@ -102,6 +102,15 @@
             width: 160px;
         }
 
+        .filter-form select {
+            padding: 7px;
+            border: 1px solid #c6ccd8;
+            border-radius: 4px;
+            font-size: 13px;
+            background-color: white;
+            cursor: pointer;
+        }
+
         /* ---------- Book list ---------- */
         .section-title {
             margin: 18px 0 10px 2px;
@@ -234,6 +243,23 @@
                 <button type="submit" class="btn btn-small">Filter</button>
             </form>
         </section>
+
+        <!-- NEW: Filter by author -->
+        <section class="filter-section">
+            <form th:action="@{/books}" method="GET" class="filter-form">
+                <label>Filter by author:</label>
+                <select name="authorId">
+                    <option value="">-- All authors --</option>
+                    <option th:each="author : ${authors}"
+                            th:value="${author.id}"
+                            th:text="${author.name + ' ' + author.surname}"
+                            th:selected="${selectedAuthorId != null and selectedAuthorId == author.id}">
+                    </option>
+                </select>
+                <button type="submit" class="btn btn-small">Filter</button>
+            </form>
+        </section>
+
 
         <!-- Books + reservation (one form) -->
         <form th:action="@{/bookReservation}" method="POST" class="reservation-form">

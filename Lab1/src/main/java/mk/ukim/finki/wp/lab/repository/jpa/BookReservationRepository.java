@@ -1,4 +1,4 @@
-package mk.ukim.finki.wp.lab.repository;
+package mk.ukim.finki.wp.lab.repository.jpa;
 
 import mk.ukim.finki.wp.lab.model.BookReservation;
 
