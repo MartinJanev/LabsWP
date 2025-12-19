@@ -5,6 +5,7 @@ import mk.ukim.finki.wp.lab.model.Book;
 import mk.ukim.finki.wp.lab.repository.jpa.AuthorRepository;
 import mk.ukim.finki.wp.lab.repository.jpa.BookRepository;
 import mk.ukim.finki.wp.lab.service.BookService;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -22,18 +23,34 @@ public class BookServiceImpl implements BookService {
 
     @Override
     public List<Book> listAll() {
-        return this.bookRepository.findAll();
+        return this.bookRepository.findAll(Sort.by("author.name")
+        );
     }
 
     @Override
     public List<Book> searchBooks(String text, Double rating) {
-        // Fallback to 0 if rating is null or empty
-        Double ratingFilter = (rating == null) ? 0.0 : rating;
 
-        return this.bookRepository.findAll().stream()
-                .filter(b->b.getTitle().toLowerCase().contains(text.toLowerCase())&& b.getAverageRating()>=ratingFilter)
-                .toList();
+        boolean hasText = (text != null && !text.isBlank());
+        boolean hasRating = (rating != null);
+
+        if (hasText && hasRating) {
+            // title contains text, rating > argument, sorted by author name
+            return this.bookRepository
+                    .findAllByTitleContainingIgnoreCaseAndAverageRatingGreaterThanOrderByAuthor_Name(text, rating);
+        } else if (hasText) {
+            // only title filter, sorted by author name
+            return this.bookRepository
+                    .findAllByTitleContainingIgnoreCaseOrderByAuthor_Name(text);
+        } else if (hasRating) {
+            // only rating filter, sorted by author name
+            return this.bookRepository
+                    .findAllByAverageRatingGreaterThanOrderByAuthor_Name(rating);
+        } else {
+            // no filters → just sort by author name
+            return this.bookRepository.findAll(Sort.by("author.name"));
+        }
     }
+
 
     @Override
     public Book findById(Long id) {

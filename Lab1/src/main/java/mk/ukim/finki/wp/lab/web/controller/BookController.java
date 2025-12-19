@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @Controller
-@RequestMapping("/books")
+@RequestMapping({"/", "/books"})
 public class BookController {
     private final BookService bookService;
     private final AuthorService authorService;
@@ -25,22 +25,32 @@ public class BookController {
     public String getBooksPage(
             @RequestParam(required = false) String error,
             @RequestParam(required = false) Long authorId,
+            @RequestParam(required = false) String text,
+            @RequestParam(required = false) Double rating,
             Model model
     ) {
-
         List<Book> books;
+
         if (authorId != null) {
             books = this.bookService.listByAuthor(authorId);
+        } else if ((text != null && !text.isBlank()) || rating != null) {
+            books = this.bookService.searchBooks(text, rating);
         } else {
             books = this.bookService.listAll();
         }
+
         model.addAttribute("books", books);
         model.addAttribute("authors", authorService.findAll());
         model.addAttribute("error", error);
         model.addAttribute("selectedAuthorId", authorId);
 
+        // keep search values so they render back into the filter form if you choose to reuse it
+        model.addAttribute("searchText", text == null ? "" : text);
+        model.addAttribute("searchRating", rating == null ? 0 : rating);
+
         return "listBooks";
     }
+
 
     @PostMapping("/add")
     public String saveBook(@RequestParam String title,

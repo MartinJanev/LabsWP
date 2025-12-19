@@ -1,0 +1,2357 @@
+===== File: ./all_contents.txt =====
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/config/DataInitializer.java =====
+package mk.ukim.finki.wp.kol2025g2.config;
+
+import jakarta.annotation.PostConstruct;
+import mk.ukim.finki.wp.kol2025g2.model.SlopeDifficulty;
+import mk.ukim.finki.wp.kol2025g2.service.SkiResortService;
+import mk.ukim.finki.wp.kol2025g2.service.SkiSlopeService;
+import org.springframework.stereotype.Component;
+
+@Component
+public class DataInitializer {
+
+    private final SkiResortService skiResortService;
+    private final SkiSlopeService skiSlopeService;
+
+    public DataInitializer(SkiResortService skiResortService, SkiSlopeService skiSlopeService) {
+        this.skiResortService = skiResortService;
+        this.skiSlopeService = skiSlopeService;
+    }
+
+    private SlopeDifficulty randomizeDifficulty(int i) {
+        if (i % 4 == 0) return SlopeDifficulty.BLUE;
+        if (i % 4 == 1) return SlopeDifficulty.RED;
+        if (i % 4 == 2) return SlopeDifficulty.BLACK;
+        return SlopeDifficulty.GREEN;
+    }
+
+    @PostConstruct
+    public void initData() {
+        for (int i = 1; i <= 3; i++) {
+            this.skiResortService.create("Ski Resort " + i, "Location " + i);
+        }
+
+        var skiResorts = this.skiResortService.listAll();
+        for (int i = 1; i <= 10; i++) {
+            String name = "Slope " + i;
+            int length = 20 + (i * 10);
+            SlopeDifficulty difficulty = this.randomizeDifficulty(i);
+            Long resortId = skiResorts.get((i - 1) % skiResorts.size()).getId();
+
+            this.skiSlopeService.create(name, length, difficulty, resortId);
+        }
+    }
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/config/SecurityConfig.java =====
+package mk.ukim.finki.wp.kol2025g2.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+/**
+ * This class is used to configure user login on path '/login' and logout on path '/logout'.
+ * The public pages in the application should be '/' and '/ski-slopes'.
+ * All other pages should be visible only for a user with admin role.
+ * Furthermore, in the "list.html" template, the 'Edit', 'Delete', 'Add' and 'Close' buttons should only be
+ * visible for a user with admin role.
+ * <p>
+ * For login inMemory users should be used. Their credentials are given below:
+ * [{
+ * username: "user",
+ * password: "user",
+ * role: "USER"
+ * },
+ * <p>
+ * {
+ * username: "admin",
+ * password: "admin",
+ * role: "ADMIN"
+ * }]
+ */
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+
+    private final PasswordEncoder passwordEncoder;
+
+    public SecurityConfig(PasswordEncoder passwordEncoder) {
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    /**
+     * Remove the implementation of the following method and replace it with your own code to implement the security requests.
+     * If you do not wish to implement the security requests, leave this code as it is.
+     */
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/",
+                                "/login",
+                                "/error",
+                                "/ski-slopes"
+                        ).permitAll()
+
+                        .requestMatchers(
+                                "/**"
+                        ).hasRole("ADMIN")
+
+                        .anyRequest().authenticated()
+                )
+                .formLogin(form -> form
+                        .permitAll()
+                        .failureUrl("/login?error=BadCredentials")
+                        .defaultSuccessUrl("/ski-slopes", true)
+                )
+                .logout((logout) -> logout
+                        .logoutUrl("/logout")
+                        .clearAuthentication(true)
+                        .invalidateHttpSession(true)
+                        .deleteCookies("JSESSIONID")
+                        .logoutSuccessUrl("/")
+                );
+
+        return http.build();
+    }
+
+    @Bean
+    public UserDetailsService userDetailsService() {
+        UserDetails user1 = User.builder()
+                .username("user")
+                .password(passwordEncoder.encode("user"))
+                .roles("USER")
+                .build();
+
+        UserDetails admin = User.builder()
+                .username("admin")
+                .password(passwordEncoder.encode("admin"))
+                .roles("ADMIN")
+                .build();
+
+        return new InMemoryUserDetailsManager(user1, admin);
+    }
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/Kol2025G2Application.java =====
+package mk.ukim.finki.wp.kol2025g2;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+@SpringBootApplication
+
+public class Kol2025G2Application {
+
+    public static void main(String[] args) {
+        SpringApplication.run(Kol2025G2Application.class, args);
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder(10);
+    }
+
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/model/exceptions/InvalidSkiResortIdException.java =====
+package mk.ukim.finki.wp.kol2025g2.model.exceptions;
+
+public class InvalidSkiResortIdException extends RuntimeException {
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/model/exceptions/InvalidSkiSlopeIdException.java =====
+package mk.ukim.finki.wp.kol2025g2.model.exceptions;
+
+public class InvalidSkiSlopeIdException extends RuntimeException {
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/model/SkiResort.java =====
+package mk.ukim.finki.wp.kol2025g2.model;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@Entity
+@AllArgsConstructor
+public class SkiResort {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String name;
+    private String location;
+
+    public SkiResort(String name, String location) {
+        this.name = name;
+        this.location = location;
+    }
+
+
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/model/SkiSlope.java =====
+package mk.ukim.finki.wp.kol2025g2.model;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.Generated;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@Entity
+@AllArgsConstructor
+public class SkiSlope {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String name;
+    private Integer length;
+    @Enumerated(EnumType.STRING)
+    private SlopeDifficulty difficulty;
+    @ManyToOne
+    private SkiResort skiResort;
+
+
+    private boolean closed = false;
+
+    public SkiSlope(String name, Integer length, SlopeDifficulty difficulty, SkiResort skiResort, boolean closed) {
+        this.name = name;
+        this.length = length;
+        this.difficulty = difficulty;
+        this.skiResort = skiResort;
+        this.closed = closed;
+    }
+
+    public SkiSlope(String name, Integer length, SlopeDifficulty difficulty, SkiResort skiResort) {
+        this.name = name;
+        this.length = length;
+        this.difficulty = difficulty;
+        this.skiResort = skiResort;
+    }
+
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/model/SlopeDifficulty.java =====
+package mk.ukim.finki.wp.kol2025g2.model;
+
+public enum SlopeDifficulty {
+    GREEN,
+    BLUE,
+    RED,
+    BLACK
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/repository/JpaSpecificationRepository.java =====
+package mk.ukim.finki.wp.kol2025g2.repository;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.NoRepositoryBean;
+
+@NoRepositoryBean
+public interface JpaSpecificationRepository<T, ID> extends JpaRepository<T, ID> {
+    Page<T> findAll(Specification<T> filter, Pageable pageable);
+}
+
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/repository/SkiResortRepository.java =====
+package mk.ukim.finki.wp.kol2025g2.repository;
+
+import mk.ukim.finki.wp.kol2025g2.model.SkiResort;
+
+public interface SkiResortRepository extends JpaSpecificationRepository<SkiResort, Long> {
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/repository/SkiSlopeRepository.java =====
+package mk.ukim.finki.wp.kol2025g2.repository;
+
+import mk.ukim.finki.wp.kol2025g2.model.SkiSlope;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface SkiSlopeRepository extends JpaSpecificationRepository<SkiSlope, Long> {
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/service/impl/FieldFilterSpecification.java =====
+package mk.ukim.finki.wp.kol2025g2.service.impl;
+
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Root;
+import org.springframework.data.jpa.domain.Specification;
+
+
+public class FieldFilterSpecification {
+
+    public static <T> Specification<T> filterEquals(Class<T> clazz, String field, String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        return (root, query, criteriaBuilder) -> criteriaBuilder.equal(fieldToPath(field, root), value);
+    }
+
+    public static <T, V> Specification<T> filterEqualsV(Class<T> clazz, String field, V value) {
+        if (value == null) {
+            return null;
+        }
+        return (root, query, criteriaBuilder) -> criteriaBuilder.equal(fieldToPath(field, root), value);
+    }
+
+    public static <T, V extends Comparable<V>> Specification<T> greaterThan(Class<T> clazz, String field, V value) {
+        if (value == null) {
+            return null;
+        }
+        return (root, query, criteriaBuilder) -> criteriaBuilder.greaterThan(fieldToPath(field, (Root<V>) root), value);
+    }
+
+    public static <T> Specification<T> filterEquals(Class<T> clazz, String field, Long value) {
+        if (value == null) {
+            return null;
+        }
+        return (root, query, criteriaBuilder) -> criteriaBuilder.equal(fieldToPath(field, root), value);
+    }
+
+    public static <T> Specification<T> filterContainsText(Class<T> clazz, String field, String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        return (root, query, criteriaBuilder) -> criteriaBuilder.like(
+                criteriaBuilder.lower(fieldToPath(field, (Root<String>) root)),
+                "%" + value.toLowerCase() + "%"
+        );
+    }
+
+    private static <T> Path<T> fieldToPath(String field, Root<T> root) {
+        String[] parts = field.split("\\.");
+        Path<T> res = root;
+        for (String p : parts) {
+            res = res.get(p);
+        }
+        return res;
+    }
+}
+
+
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/service/impl/SkiResortServiceImpl.java =====
+package mk.ukim.finki.wp.kol2025g2.service.impl;
+
+import mk.ukim.finki.wp.kol2025g2.model.SkiResort;
+import mk.ukim.finki.wp.kol2025g2.model.exceptions.InvalidSkiResortIdException;
+import mk.ukim.finki.wp.kol2025g2.repository.SkiResortRepository;
+import mk.ukim.finki.wp.kol2025g2.service.SkiResortService;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class SkiResortServiceImpl implements SkiResortService {
+
+    private final SkiResortRepository skiResortRepository;
+
+    public SkiResortServiceImpl(SkiResortRepository skiResortRepository) {
+        this.skiResortRepository = skiResortRepository;
+    }
+
+
+    @Override
+    public SkiResort findById(Long id) {
+        return skiResortRepository.findById(id).orElseThrow(() -> new InvalidSkiResortIdException());
+    }
+
+    @Override
+    public List<SkiResort> listAll() {
+        return skiResortRepository.findAll();
+    }
+
+    @Override
+    public SkiResort create(String name, String location) {
+        SkiResort skiResort = new SkiResort(name, location);
+        return skiResortRepository.save(skiResort);
+    }
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/service/impl/SkiSlopeServiceImpl.java =====
+package mk.ukim.finki.wp.kol2025g2.service.impl;
+
+import mk.ukim.finki.wp.kol2025g2.model.SkiResort;
+import mk.ukim.finki.wp.kol2025g2.model.SkiSlope;
+import mk.ukim.finki.wp.kol2025g2.model.SlopeDifficulty;
+import mk.ukim.finki.wp.kol2025g2.model.exceptions.InvalidSkiSlopeIdException;
+import mk.ukim.finki.wp.kol2025g2.repository.SkiResortRepository;
+import mk.ukim.finki.wp.kol2025g2.repository.SkiSlopeRepository;
+import mk.ukim.finki.wp.kol2025g2.service.SkiResortService;
+import mk.ukim.finki.wp.kol2025g2.service.SkiSlopeService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.web.PagedResourcesAssembler;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class SkiSlopeServiceImpl implements SkiSlopeService {
+
+    private final SkiSlopeRepository skiSlopeRepository;
+    private final SkiResortService skiResortRepository;
+
+    public SkiSlopeServiceImpl(SkiSlopeRepository skiSlopeRepository, SkiResortService skiResortRepository) {
+        this.skiSlopeRepository = skiSlopeRepository;
+        this.skiResortRepository = skiResortRepository;
+    }
+
+    @Override
+    public List<SkiSlope> listAll() {
+        return skiSlopeRepository.findAll();
+    }
+
+    @Override
+    public SkiSlope findById(Long id) {
+        return this.skiSlopeRepository.findById(id).orElseThrow(() -> new InvalidSkiSlopeIdException());
+    }
+
+    @Override
+    public SkiSlope create(String name, Integer length, SlopeDifficulty difficulty, Long skiResort) {
+        SkiResort resort = this.skiResortRepository.findById(skiResort);
+        SkiSlope slope = new SkiSlope(
+                name,
+                length,
+                difficulty,
+                resort
+        );
+
+        return this.skiSlopeRepository.save(slope);
+    }
+
+    @Override
+    public SkiSlope update(Long id, String name, Integer length, SlopeDifficulty difficulty, Long skiResort) {
+        SkiSlope slope = this.findById(id);
+        SkiResort resort = this.skiResortRepository.findById(skiResort);
+
+        slope.setName(name);
+        slope.setLength(length);
+        slope.setDifficulty(difficulty);
+        slope.setSkiResort(resort);
+
+        return this.skiSlopeRepository.save(slope);
+    }
+
+    @Override
+    public SkiSlope delete(Long id) {
+        SkiSlope slope = this.findById(id);
+        this.skiSlopeRepository.delete(slope);
+        return slope;
+    }
+
+    @Override
+    public SkiSlope close(Long id) {
+        SkiSlope slope = this.findById(id);
+        slope.setClosed(true);
+        return this.skiSlopeRepository.save(slope);
+    }
+
+    @Override
+    public Page<SkiSlope> findPage(String name, Integer length, SlopeDifficulty difficulty, Long skiResort, int pageNum, int pageSize) {
+        Specification<SkiSlope> spec = Specification.allOf(
+                FieldFilterSpecification.filterContainsText(SkiSlope.class, "name", name),
+                FieldFilterSpecification.filterEqualsV(SkiSlope.class, "difficulty", difficulty),
+                FieldFilterSpecification.greaterThan(SkiSlope.class, "length", length),
+                FieldFilterSpecification.filterEquals(SkiSlope.class, "skiResort.id", skiResort)
+        );
+
+        return this.skiSlopeRepository.findAll(spec, PageRequest.of(pageNum, pageSize));
+    }
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/service/SkiResortService.java =====
+package mk.ukim.finki.wp.kol2025g2.service;
+
+import mk.ukim.finki.wp.kol2025g2.model.SkiResort;
+import mk.ukim.finki.wp.kol2025g2.model.exceptions.InvalidSkiResortIdException;
+
+import java.util.List;
+
+public interface SkiResortService {
+
+    /**
+     * @param id The id of the ski resort that we want to obtain
+     * @return The ski resort with the appropriate id
+     * @throws InvalidSkiResortIdException when there is no ski resort with the given id
+     */
+    SkiResort findById(Long id);
+
+    /**
+     * @return List of all ski resorts in the database
+     */
+    List<SkiResort> listAll();
+
+    /**
+     * This method is used to create a new ski resort, and save it in the database.
+     *
+     * @param name     The name of the ski resort
+     * @param location The location of the ski resort
+     * @return The ski resort that is created. The id should be generated when the ski resort is created.
+     */
+    SkiResort create(String name, String location);
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/service/SkiSlopeService.java =====
+package mk.ukim.finki.wp.kol2025g2.service;
+
+import mk.ukim.finki.wp.kol2025g2.model.SkiSlope;
+import mk.ukim.finki.wp.kol2025g2.model.SlopeDifficulty;
+import mk.ukim.finki.wp.kol2025g2.model.exceptions.InvalidSkiSlopeIdException;
+import org.springframework.data.domain.Page;
+
+import java.util.List;
+
+public interface SkiSlopeService {
+
+    /**
+     * @return List of all ski slopes in the database
+     */
+    List<SkiSlope> listAll();
+
+    /**
+     * @param id The id of the ski slope that we want to obtain
+     * @return The ski slope with the appropriate id
+     * @throws InvalidSkiSlopeIdException when there is no ski slope with the given id
+     */
+    SkiSlope findById(Long id);
+
+    /**
+     * This method is used to create a new ski slope, and save it in the database.
+     *
+     * @param name       The name of the ski slope
+     * @param length     The length of the ski slope in meters
+     * @param difficulty The difficulty level of the ski slope
+     * @param skiResort  The ski resort that the ski slope belongs to
+     * @return The ski slope that is created. The id should be generated when the ski slope is created.
+     */
+    SkiSlope create(String name, Integer length, SlopeDifficulty difficulty, Long skiResort);
+
+    /**
+     * This method is used to update a ski slope, and save it in the database.
+     *
+     * @param id         The id of the ski slope that is being updated
+     * @param name       The name of the ski slope
+     * @param length     The length of the ski slope in meters
+     * @param difficulty The difficulty level of the ski slope
+     * @param skiResort  The id of ski resort that the ski slope belongs to
+     * @return The ski slope that is updated.
+     * @throws InvalidSkiSlopeIdException when there is no ski slope with the given id
+     */
+    SkiSlope update(Long id, String name, Integer length, SlopeDifficulty difficulty, Long skiResort);
+
+    /**
+     * This method deletes a ski slope from the database.
+     *
+     * @param id The id of the ski slope that we want to delete
+     * @return The ski slope that is deleted.
+     * @throws InvalidSkiSlopeIdException when there is no ski slope with the given id
+     */
+    SkiSlope delete(Long id);
+
+    /**
+     * This method closes a ski slope.
+     *
+     * @param id The ID of the ski slope we want to close.
+     * @return The updated ski slope.
+     * @throws InvalidSkiSlopeIdException If the ski slope with the given ID does not exist.
+     */
+    SkiSlope close(Long id);
+
+    /**
+     * Returns a page of ski slopes that match the given criteria.
+     *
+     * @param name       Filters ski slopes whose names contain the specified text.
+     * @param length     Filters ski slopes longer than the specified length in meters.
+     * @param difficulty Filters ski slopes matching the specified difficulty level.
+     * @param skiResort  Filters ski slopes belonging to the specified ski center.
+     * @param pageNum    The page number
+     * @param pageSize   The number of items per page
+     * @return The page of ski slopes that match the given criteria.
+     */
+    Page<SkiSlope> findPage(String name, Integer length, SlopeDifficulty difficulty, Long skiResort, int pageNum, int pageSize);
+}
+
+
+===== File: ./main/java/mk/ukim/finki/wp/kol2025g2/web/SkiSlopeController.java =====
+package mk.ukim.finki.wp.kol2025g2.web;
+
+import mk.ukim.finki.wp.kol2025g2.model.SkiSlope;
+import mk.ukim.finki.wp.kol2025g2.model.SlopeDifficulty;
+import mk.ukim.finki.wp.kol2025g2.service.SkiResortService;
+import mk.ukim.finki.wp.kol2025g2.service.SkiSlopeService;
+import net.sourceforge.htmlunit.xpath.operations.Mod;
+import org.springframework.data.domain.Page;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+@Controller
+@RequestMapping({"/", "/ski-slopes"})
+public class SkiSlopeController {
+
+    private final SkiSlopeService skiSlopeService;
+    private final SkiResortService skiResortService;
+
+    public SkiSlopeController(SkiSlopeService skiSlopeService, SkiResortService skiResortService) {
+        this.skiSlopeService = skiSlopeService;
+        this.skiResortService = skiResortService;
+    }
+
+    /**
+     * This method should use the "list.html" template to display all ski slopes.
+     * The method should be mapped on paths '/' and '/ski-slopes'.
+     * The arguments that this method takes are optional and can be 'null'.
+     * The filtered ski slopes that are the result of the call
+     * findPage method from the SkiSlopeService should be displayed.
+     * If you want to return a paginated result, you should also pass the page number and the page size as arguments.
+     *
+     * @param name       Filters ski slopes whose names contain the specified text.
+     * @param length     Filters ski slopes longer than the specified length in meters.
+     * @param difficulty Filters ski slopes matching the specified difficulty level.
+     * @param skiResort  Filters ski slopes belonging to the specified ski center.
+     * @param pageNum    The page number
+     * @param pageSize   The number of items per page
+     * @return The view "list.html".
+     */
+    @GetMapping
+    public String listAll(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) Integer length,
+            @RequestParam(required = false) SlopeDifficulty difficulty,
+            @RequestParam(required = false) Long skiResort,
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "10") Integer pageSize,
+            Model model
+    ) {
+        Page<SkiSlope> page = this.skiSlopeService.findPage(
+                name,
+                length,
+                difficulty,
+                skiResort,
+                pageNum - 1,
+                pageSize
+        );
+        model.addAttribute("page", page);
+        model.addAttribute("slopes", page.getContent());
+        model.addAttribute("slopeDifficulties", SlopeDifficulty.values());
+        model.addAttribute("skiResorts", this.skiResortService.listAll());
+
+        model.addAttribute("name", name);
+        model.addAttribute("difficulty", difficulty);
+        model.addAttribute("skiResort", skiResort);
+        return "list";
+    }
+
+    /**
+     * This method should display the "form.html" template.
+     * The method should be mapped on path '/ski-slopes/add'.
+     *
+     * @return The view "form.html".
+     */
+    @GetMapping("/add")
+    public String showAdd(Model model) {
+        model.addAttribute("slopeDifficulties", SlopeDifficulty.values());
+        model.addAttribute("skiResorts", this.skiResortService.listAll());
+        return "form";
+    }
+
+    /**
+     * This method should display the "form.html" template.
+     * However, in this case, all 'input' elements should be filled with the appropriate value for the ski slope that is updated.
+     * The method should be mapped on path '/ski-slopes/edit/[id]'.
+     *
+     * @return The view "form.html".
+     */
+    @GetMapping("/edit/{id}")
+    public String edit(@PathVariable Long id, Model model) {
+        SkiSlope slope = this.skiSlopeService.findById(id);
+
+        model.addAttribute("skiSlope", slope);
+        model.addAttribute("slopeDifficulties", SlopeDifficulty.values());
+        model.addAttribute("skiResorts", skiResortService.listAll());
+
+        return "form";
+    }
+
+
+    /**
+     * This method should create a ski slope given the arguments it takes.
+     * The method should be mapped on path '/ski-slopes'.
+     * After the ski slope is created, all ski slopes should be displayed.
+     *
+     * @return The view "list.html".
+     */
+    @PostMapping
+    public String create(
+            @RequestParam String name,
+            @RequestParam Integer length,
+            @RequestParam SlopeDifficulty difficulty,
+            @RequestParam Long skiResort) {
+        this.skiSlopeService.create(
+                name,
+                length,
+                difficulty,
+                skiResort
+        );
+        return "redirect:/ski-slopes";
+    }
+
+    /**
+     * This method should update a ski slope given the arguments it takes.
+     * The method should be mapped on path '/ski-slopes/[id]'.
+     * After the ski slope is updated, all ski slopes should be displayed.
+     *
+     * @return The view "list.html".
+     */
+    @PostMapping("/{id}")
+    public String update(
+            @PathVariable Long id,
+            @RequestParam String name,
+            @RequestParam Integer length,
+            @RequestParam SlopeDifficulty difficulty,
+            @RequestParam Long skiResort) {
+        this.skiSlopeService.update(
+                id,
+                name,
+                length,
+                difficulty,
+                skiResort
+        );
+        return "redirect:/ski-slopes";
+    }
+
+    /**
+     * This method should delete the ski slope that has the appropriate identifier.
+     * The method should be mapped on path '/ski-slopes/delete/[id]'.
+     * After the ski slope is deleted, all ski slopes should be displayed.
+     *
+     * @return The view "list.html".
+     */
+    @PostMapping("/delete/{id}")
+    public String delete(@PathVariable Long id) {
+        this.skiSlopeService.delete(id);
+        return "redirect:/ski-slopes";
+    }
+
+    /**
+     * This method should close a ski slope.
+     * The method should be mapped on path '/ski-slopes/close/[id]'.
+     * After the selected ski slope is closed, all ski slopes should be displayed.
+     *
+     * @param id The ID of the ski slope to close.
+     * @return The view "list.html".
+     */
+    @PostMapping("/close/{id}")
+    public String close(@PathVariable Long id) {
+        this.skiSlopeService.close(id);
+        return "redirect:/ski-slopes";
+    }
+
+}
+
+===== File: ./main/resources/application-test.properties =====
+server.port=9999
+
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+
+spring.h2.console.enabled=true
+spring.h2.console.path=/h2
+
+
+===== File: ./main/resources/application.properties =====
+spring.application.name=kol2025-g2
+
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.username=sa
+
+spring.h2.console.path=/h2
+
+spring.jpa.show-sql=false
+spring.h2.console.enabled=true
+
+spring.thymeleaf.cache=false
+
+
+===== File: ./main/resources/templates/form.html =====
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Ski Slope Form</title>
+</head>
+<body>
+<!-- The form should submit to SkiSlopeController.create or SkiSlopeController.update,
+     depending on whether we are creating or editing a ski slope -->
+<form method="post" th:action="@{${skiSlope == null ? '/ski-slopes' : '/ski-slopes/' + skiSlope.id}}">
+    <div>
+        <label for="name">Slope Name</label>
+        <input type="text"
+               id="name"
+               name="name"
+               th:value="${skiSlope?.name}"
+               required>
+    </div>
+
+    <div>
+        <label for="length">Slope Length (in meters)</label>
+        <input type="number"
+               id="length"
+               name="length"
+               th:value="${skiSlope?.length}"
+               required>
+    </div>
+
+    <div>
+        <label for="difficulty">Slope Difficulty</label><br/>
+        <select id="difficulty" name="difficulty" size="5" required>
+            <!-- For each SlopeDifficulty you should have one <option> like below  -->
+            <option th:each="d : ${slopeDifficulties}"
+                    th:value="${d.name()}"
+                    th:text="${d.name()}"
+                    th:selected="${skiSlope!= null and skiSlope.difficulty==d}">[slopeDifficulty]
+            </option>
+        </select>
+    </div>
+
+    <div>
+        <label for="skiResort">Ski Resort</label><br/>
+        <select id="skiResort" name="skiResort" required size="5">
+            <!-- For each ski resort you should have one <option> like below  -->
+            <option th:each="r : ${skiResorts}"
+                    th:value="${r.id}"
+                    th:text="${r.name}"
+                    th:selected="${skiSlope != null and skiSlope.skiResort.id == r.id}">[skiResort.name]
+            </option>
+        </select>
+    </div>
+
+    <button id="submit" type="submit">Submit</button>
+    <a id="back" href="/ski-slopes" type="button" class="btn btn-primary">Back to Ski Slopes</a>
+</form>
+
+<div>
+    <ul id="nav">
+        <li><a href="/">Home</a></li>
+        <li><a href="/login">Login</a></li>
+        <li><a href="/logout">Logout</a></li>
+    </ul>
+</div>
+</body>
+</html>
+
+
+===== File: ./main/resources/templates/list.html =====
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Ski Slope List</title>
+</head>
+<body>
+
+<div>
+    <!-- The form below should invoke the method SkiSlopeController.listAll -->
+    <form id="filter-form" action="/ski-slopes">
+        <label for="name">Slope Name</label>
+        <input id="name" type="text" name="name"/>
+
+        <label for="length">Slope Length (in meters)</label>
+        <input id="length" type="number" name="length"/>
+
+        <label for="difficulty">Slope Difficulty</label>
+        <select id="difficulty" name="difficulty">
+            <option value="">All</option>
+            <!-- For each SlopeDifficulty you should have one <option> like below  -->
+            <option th:each="d : ${slopeDifficulties}"
+                    th:value="${d.name()}"
+                    th:text="${d.name()}"
+                    th:selected="${difficulty !=null and d==difficulty}">[slopeDifficulty]
+            </option>
+        </select>
+
+        <label for="skiResort">Ski Resort</label>
+        <select id="skiResort" name="skiResort">
+            <option value="">All</option>
+            <!-- For each ski resort you should have one <option> like below  -->
+            <option
+                    th:each="r : ${skiResorts}"
+                    th:value="${r.id}"
+                    th:text="${r.id}"
+                    th:selected="${resort!=null and r.id == resort}">[skiResort.name]
+            </option>
+        </select>
+
+        <button id="filter" type="submit">Filter</button>
+    </form>
+
+    <div>
+        <!-- SkiSlopeController.showAdd -->
+        <a sec:authorize="hasRole('ADMIN')" th:href="@{/ski-slopes/add}" class="add-item">Add new ski slope</a>
+    </div>
+
+    <table>
+        <tr>
+            <th>Slope Name</th>
+            <th>Length</th>
+            <th>Difficulty</th>
+            <th>Ski Resort</th>
+            <th>Open/Closed</th>
+            <th>Actions</th>
+        </tr>
+        <!-- For each ski slope you should have one <tr> like below -->
+        <tr class="item" th:each="slope : ${page.getContent()}">
+            <td th:text="${slope.name}">[slope.name]</td>
+            <td th:text="${slope.length}">[slope.length]</td>
+            <td th:text="${slope.difficulty}">[slope.difficulty]</td>
+            <td th:text="${slope.skiResort.name}">[slope.skiResort.name]</td>
+            <td th:text="${slope.closed}">[slope.closed] -> OPEN/CLOSED</td>
+            <td>
+                <!-- SkiSlopeController.edit -->
+                <a class="edit-item"
+                   sec:authorize="hasRole('ADMIN')"
+                   th:href="@{/ski-slopes/edit/{id}(id=${slope.id})}">
+                    Edit
+                </a>
+
+                <!-- SkiSlopeController.delete -->
+                <form sec:authorize="hasRole('ADMIN')"
+                      th:action="@{/ski-slopes/delete/{id}(id=${slope.id})}"
+                      method="post">
+                    <button type="submit" class="delete-item">Delete</button>
+                </form>
+
+                <!-- SkiSlopeController.close -->
+                <form th:if="${!slope.closed}"
+                      sec:authorize="hasRole('ADMIN')"
+                      th:action="@{/ski-slopes/close/{id}(id=${slope.id})}"
+                      method="post">
+                    <button type="submit" class="close-item">Close</button>
+                </form>
+            </td>
+        </tr>
+    </table>
+    <div th:include="paging :: pageSection(${page})"></div>
+
+</div>
+<div>
+    <ul id="nav">
+        <li><a href="/">Home</a></li>
+        <li><a href="/login">Login</a></li>
+        <li><a href="/logout">Logout</a></li>
+    </ul>
+</div>
+</body>
+</html>
+
+
+===== File: ./main/resources/templates/paging.html =====
+<div th:fragment="pageSection(page)">
+    <div class="row">
+        <div class="col-8">
+            <nav aria-label="Page navigation">
+                <ul class="pagination">
+                    <li class="cursor-pointer page-item" th:classappend="${page.isFirst()} ? 'disabled' : ''">
+                        <a class="page-link" href="#" onClick="updateQueryStringParameter('pageNum', 1)">First</a>
+                    </li>
+                    <li class="page-item" th:classappend="${page.hasPrevious()} ? '': 'disabled'">
+                        <a class="page-link" href="#"
+                           onClick="updateQueryStringParameter('pageNum', this.getAttribute('page-number'))"
+                           th:page-number="${page.number}">Previous</a>
+                    </li>
+                    <li th:each="pageNum : ${#numbers.sequence(T(java.lang.Math).max(1,page.number-5), (page.totalPages == 0? 1: T(java.lang.Math).min(page.totalPages,page.number+5)))}"
+                        th:class="${page.number+1 == pageNum} ? 'page-item active' : 'page-item'">
+                        <a class="page-link" href="#"
+                           onClick="updateQueryStringParameter('pageNum', this.getAttribute('page-number'))"
+                           th:page-number="${pageNum}" th:text="${pageNum}"></a>
+                    </li>
+                    <li class="page-item" th:classappend="${page.hasNext()} ? '': 'disabled'">
+                        <a class="page-link" href="#"
+                           onClick="updateQueryStringParameter('pageNum', this.getAttribute('page-number'))"
+                           th:page-number="${page.number+2}">Next</a>
+                    </li>
+                    <li class="page-item" th:classappend="${page.isLast()} ? 'disabled' : ''">
+                        <a class="page-link" href="#"
+                           onClick="updateQueryStringParameter('pageNum', this.getAttribute('page-number'))"
+                           th:page-number="${page.totalPages}">Last</a>
+
+                    </li>
+                </ul>
+            </nav>
+        </div>
+
+        <div class="col-4">
+            <div class="d-flex align-items-center mb-3">
+                <label for="results" class="mr-2 mb-0">Results by page: </label>
+
+                <select id="results" class="form-control custom-select" style="max-width: 100px;"
+                        onchange="updateQueryStringParameter('pageSize',this.value)">
+                    <option value="10" th:selected="${page.size == 10}">10</option>
+                    <option value="20" th:selected="${page.size == 20}">20</option>
+                    <option value="50" th:selected="${page.size == 50}">50</option>
+                    <option value="100" th:selected="${page.size == 100}">100</option>
+                    <option value="1000" th:selected="${page.size == 1000}">1000</option>
+                </select>
+                <span class="ms-1 me-1"> / Total: </span>
+                <b class="ms-1" th:text="${page.totalElements}"></b>
+            </div>
+        </div>
+    </div>
+    <script th:inline="javascript">
+        function updateQueryStringParameter(key, value) {
+            var uri = window.location.href;
+            var re = new RegExp("([?&])" + key + "=.*?(&|$)", "i");
+            var separator = uri.indexOf('?') !== -1 ? "&" : "?";
+            if (uri.match(re)) {
+                uri = uri.replace(re, '$1' + key + "=" + value + '$2');
+            } else {
+                uri = uri + separator + key + "=" + value;
+            }
+            window.location = uri;
+        }
+    </script>
+
+
+</div>
+
+
+===== File: ./printAllFiles.sh =====
+#!/bin/bash
+
+# Output file where all contents will be saved
+output_file="all_contents.txt"
+
+# Empty the output file if it exists
+> "$output_file"
+
+# Loop through all files in the current directory and subdirectories
+find . -type f | while read -r file; do
+    echo "===== File: $file =====" >> "$output_file"
+    cat "$file" >> "$output_file"
+    echo -e "\n" >> "$output_file"
+done
+
+echo "All contents have been written to $output_file"
+
+
+===== File: ./test/java/mk/ukim/finki/wp/exam/util/CodeExtractor.java =====
+package mk.ukim.finki.wp.exam.util;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+
+import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+public class CodeExtractor {
+
+    public static void submitSourcesAndLogs() throws JsonProcessingException {
+        File root = new File(".");
+        System.out.println(root.getAbsolutePath());
+
+        File basePackage = new File(root, "src");
+        System.out.println(basePackage.getAbsolutePath());
+        List<File> javaFiles = findJavaFiles(basePackage, ".java");
+        Map<String, String> content = readFilesContent(javaFiles);
+
+        File resources = new File(root, "src/main/resources");
+        List<File> properties = findJavaFiles(resources, ".properties");
+        List<File> templates = findJavaFiles(resources, ".html");
+        templates.addAll(properties);
+        Map<String, String> htmlAndTemplates = readFilesContent(templates);
+
+        content.putAll(htmlAndTemplates);
+
+        SubmissionHelper.submitSource(content);
+    }
+
+    public static List<File> findJavaFiles(File root, String extension) {
+        List<File> javaFiles = new ArrayList<>();
+        File[] files = root.listFiles();
+        for (File f : files) {
+            if (f.isDirectory()) {
+                javaFiles.addAll(findJavaFiles(f, extension));
+            } else if (f.getName().endsWith(extension)) {
+                javaFiles.add(f);
+            }
+        }
+        return javaFiles;
+    }
+
+    public static Map<String, String> readFilesContent(List<File> javaFiles) {
+        Map<String, String> fileContent = new TreeMap<>();
+        for (File f : javaFiles) {
+            try {
+                String content = readString(f.getAbsolutePath());
+                fileContent.put(f.getAbsolutePath(), content);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return fileContent;
+    }
+
+    private static String readString(String path) throws IOException {
+        StringBuilder builder = new StringBuilder();
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(path), "UTF-8"))) {
+            String line = null;
+            while ((line = br.readLine()) != null)
+                builder.append(line).append("\n");
+        }
+        return builder.toString();
+    }
+}
+
+
+===== File: ./test/java/mk/ukim/finki/wp/exam/util/ExamAssert.java =====
+package mk.ukim.finki.wp.exam.util;
+
+public class ExamAssert {
+
+    public static boolean assertEquals(String message, Object expected, Object actual) {
+        if (expected == null && actual == null) {
+            success(message, expected, actual);
+            return true;
+        } else if (expected == null || actual == null) {
+            fail(message, expected, actual);
+            return false;
+        } else if (expected.equals(actual)) {
+            success(message, expected, actual);
+            return true;
+        } else {
+            fail(message, expected, actual);
+            return false;
+        }
+    }
+
+    public static boolean assertNotEquals(String message, Object expected, Object actual) {
+        if (expected == null && actual == null) {
+            fail("(NOT EQUAL) " + message, expected, actual);
+            return false;
+        } else if (expected == null || actual == null) {
+            success("(NOT EQUAL) " + message, expected, actual);
+            return true;
+        } else if (expected.equals(actual)) {
+            fail("(NOT EQUAL) " + message, expected, actual);
+            return false;
+        } else {
+            success("(NOT EQUAL) " + message, expected, actual);
+            return true;
+        }
+    }
+
+    public static boolean assertUrlEquals(String message, String expected, String actual) {
+        if (expected == null && actual == null) {
+            success(message, expected, actual);
+            return true;
+        } else if (expected == null || actual == null) {
+            fail(message, expected, actual);
+            return false;
+        } else if (expected.equals(actual)) {
+            success(message, expected, actual);
+            return true;
+        } else if (actual.contains(expected) && actual.length() == expected.length() + 1) {
+            success(message, expected, actual);
+            return true;
+        } else {
+            fail(message, expected, actual);
+            return false;
+        }
+    }
+
+    private static void fail(String message, Object expected, Object actual) {
+        SubmissionHelper.submitFailedAssert(message, expected, actual);
+    }
+
+    private static void success(String message, Object expected, Object actual) {
+        SubmissionHelper.submitSuccessAssert(message, expected, actual);
+    }
+}
+
+
+===== File: ./test/java/mk/ukim/finki/wp/exam/util/ExamAssertionException.java =====
+package mk.ukim.finki.wp.exam.util;
+
+public class ExamAssertionException extends RuntimeException {
+
+    public ExamAssertionException(String message, Object expected, Object actual) {
+        super(String.format("%s:\texpected: <%s>\tactual:\t<%s>", message, expected.toString(), actual.toString()));
+    }
+}
+
+
+===== File: ./test/java/mk/ukim/finki/wp/exam/util/FailedSubmissionException.java =====
+package mk.ukim.finki.wp.exam.util;
+
+public class FailedSubmissionException extends RuntimeException {
+}
+
+
+===== File: ./test/java/mk/ukim/finki/wp/exam/util/LoadSolution.java =====
+package mk.ukim.finki.wp.exam.util;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.codec.binary.Base64;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
+
+import java.io.*;
+import java.nio.charset.Charset;
+import java.util.HashMap;
+import java.util.stream.Collectors;
+
+public class LoadSolution {
+
+    private static ObjectMapper objectMapper = new ObjectMapper();
+
+    static String index = "";
+
+    public static void main(String[] args) throws Exception {
+        if (args.length > 0) {
+            index = args[0];
+        }
+        System.out.println(index);
+        tryResetSrcMain();
+        getAndLoadLastSolution(index);
+//        commitSolution(index);
+    }
+
+    private static void commitSolution(String index) {
+        try {
+            ProcessBuilder createBranch = new ProcessBuilder();
+            createBranch.command("git", "checkout", "-b", index);
+            Process createBranchProcess = createBranch.start();
+            int exitCode = createBranchProcess.waitFor();
+            System.err.println(new BufferedReader(new InputStreamReader(createBranchProcess.getInputStream())).lines().collect(Collectors.joining("\n")));
+
+
+            ProcessBuilder addChangesBuilder = new ProcessBuilder();
+            addChangesBuilder.command("git", "add", "src/main/*");
+            Process addChangesProcess = addChangesBuilder.start();
+            exitCode = addChangesProcess.waitFor();
+            System.err.println(new BufferedReader(new InputStreamReader(addChangesProcess.getInputStream())).lines().collect(Collectors.joining("\n")));
+
+
+            ProcessBuilder commitBuilder = new ProcessBuilder();
+            commitBuilder.command("git", "commit", "-m", "'" + index + "'");
+            Process commitProcess = commitBuilder.start();
+            exitCode = commitProcess.waitFor();
+            System.err.println(new BufferedReader(new InputStreamReader(commitProcess.getInputStream())).lines().collect(Collectors.joining("\n")));
+
+            System.out.println("git push");
+            ProcessBuilder pushBuilder = new ProcessBuilder();
+            pushBuilder.command("git", "push", "--set-upstream", "origin", index);
+            Process pushProcess = pushBuilder.start();
+            exitCode = pushProcess.waitFor();
+            System.err.println(new BufferedReader(new InputStreamReader(pushProcess.getInputStream())).lines().collect(Collectors.joining("\n")));
+
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void tryResetSrcMain() {
+        try {
+
+            ProcessBuilder createBranch = new ProcessBuilder();
+            createBranch.command("git", "checkout", "master");
+            Process createBranchProcess = createBranch.start();
+            int exitCode = createBranchProcess.waitFor();
+            System.err.println(new BufferedReader(new InputStreamReader(createBranchProcess.getInputStream())).lines().collect(Collectors.joining("\n")));
+
+            ProcessBuilder restoreBuilder = new ProcessBuilder();
+            restoreBuilder.command("git", "restore", "-s@", "-SW", "--", "src/main/");
+            Process restoreProcess = restoreBuilder.start();
+            BufferedReader restoreReader = new BufferedReader(new InputStreamReader(restoreProcess.getInputStream()));
+
+            String line;
+            while ((line = restoreReader.readLine()) != null) {
+                System.out.println(line);
+            }
+            exitCode = restoreProcess.waitFor();
+            System.out.println("\nExited with error code : " + exitCode);
+
+            ProcessBuilder cleanBuilder = new ProcessBuilder();
+            cleanBuilder.command("git", "clean", "-fdx", "src/main/");
+            Process cleanProcess = cleanBuilder.start();
+            BufferedReader cleanReader = new BufferedReader(new InputStreamReader(cleanProcess.getInputStream()));
+
+            while ((line = cleanReader.readLine()) != null) {
+                System.out.println(line);
+            }
+            exitCode = cleanProcess.waitFor();
+            System.out.println("\nExited with error code : " + exitCode);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void getAndLoadLastSolution(String index) throws IOException {
+        RestTemplate restTemplate = new RestTemplate();
+        ResponseEntity<String> response = restTemplate.exchange("http://185.153.49.149/eg/api/grading/" + examId + "/last_submission/" + index,
+                HttpMethod.GET,
+                new HttpEntity<>(createHeaders(System.getenv("WP_USER"), System.getenv("WP_PASS"))),
+                String.class);
+        loadSolution(new ByteArrayInputStream(response.getBody().getBytes()));
+    }
+
+    public static void getSolutionById(Integer id) throws IOException {
+        RestTemplate restTemplate = new RestTemplate();
+        ResponseEntity<String> response = restTemplate.exchange("http://185.153.49.149/eg/api/grading/submission/" + id,
+                HttpMethod.GET,
+                new HttpEntity<>(createHeaders(System.getenv("WP_USER"), System.getenv("WP_PASS"))),
+                String.class);
+        loadSolution(new ByteArrayInputStream(response.getBody().getBytes()));
+    }
+
+    public static void loadSolution(InputStream response) throws IOException {
+        HashMap<String, String> solution = objectMapper
+                .reader()
+                .forType(new TypeReference<HashMap<String, String>>() {
+                })
+                .readValue(response);
+        if (solution.isEmpty()) {
+            System.err.println("EMPTY SOLUTION!");
+        } else {
+            System.err.println(solution.keySet());
+        }
+
+        solution.keySet().forEach(k -> {
+            new File("." + k.substring(0, k.lastIndexOf("/"))).mkdirs();
+            try (BufferedWriter br = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("." + k)))) {
+                br.write(solution.get(k));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+        });
+    }
+
+    static HttpHeaders createHeaders(String username, String password) {
+        return new HttpHeaders() {{
+            String auth = username + ":" + password;
+            byte[] encodedAuth = Base64.encodeBase64(auth.getBytes(Charset.forName("US-ASCII")));
+            String authHeader = "Basic " + new String(encodedAuth);
+            set("Authorization", authHeader);
+        }};
+    }
+
+    private static Integer examId = 7;
+}
+
+
+===== File: ./test/java/mk/ukim/finki/wp/exam/util/SubmissionHelper.java =====
+package mk.ukim.finki.wp.exam.util;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.codec.binary.Base64;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
+
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Map;
+
+public class SubmissionHelper {
+    private static Long examId = 16412L;
+
+    public static String index;
+
+    public static String exam;
+    public static Long sum = 0l;
+
+    public static ObjectMapper objectMapper = new ObjectMapper();
+    public static ArrayList<String> log = new ArrayList<>();
+    public static ArrayList<Exception> errors = new ArrayList<>();
+    public static boolean hasError = false;
+    public static String test;
+    public static int testPoints = 0;
+
+    public static void submitSource(Map<String, String> content) throws JsonProcessingException {
+
+        String solution = objectMapper.writeValueAsString(content);
+        String logString = objectMapper.writeValueAsString(log);
+        RestTemplate restTemplate = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        MultiValueMap<String, String> map = new LinkedMultiValueMap<>();
+        map.add("examName", exam);
+        map.add("index", index);
+        map.add("solution", solution);
+        map.add("log", logString);
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(map, headers);
+        ResponseEntity<String> response = restTemplate.postForEntity("http://185.153.49.149/submit", request, String.class);
+
+        System.err.println("SUCCESS SUBMIT");
+    }
+
+    public static void startTest(String testName, int points) {
+        test = testName;
+        testPoints = points;
+        hasError = false;
+        errors.clear();
+        log.add(String.format("S;%s;Started", testName));
+    }
+
+    public static void endTest() {
+        log.add(String.format("E;%s;%s", test, hasError ? "FAILED" : "PASSED"));
+        if (!hasError) {
+            sum += testPoints;
+        }
+
+        showTestLog();
+        test = null;
+        testPoints = 0;
+
+        if (hasError) {
+            logErrors();
+            throw new ExamAssertionException(test + " failed", "PASSED", "FAILED");
+        }
+    }
+
+    public static void submitGrade() {
+
+        String studentIndex = System.getenv("student_index");
+
+        RestTemplate restTemplate = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        String auth = System.getenv("WP_USER") + ":" + System.getenv("WP_PASS");
+        byte[] encodedAuth = Base64.encodeBase64(auth.getBytes(Charset.forName("US-ASCII")));
+        String authHeader = "Basic " + new String(encodedAuth);
+        headers.add("Authorization", authHeader);
+
+        MultiValueMap<String, String> map = new LinkedMultiValueMap<>();
+        map.add("grade", sum + "");
+        map.add("student_index", studentIndex);
+        map.add("exam_id", examId + "");
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(map, headers);
+
+        System.err.println(studentIndex);
+        System.err.println(sum);
+        ResponseEntity<String> response = restTemplate.postForEntity(
+                "http://wp-grading/submit",
+                request,
+                String.class);
+
+        System.err.println("SUCCESS SUBMIT");
+    }
+
+
+    public static void submitSuccessAssert(String message, Object expected, Object actual) {
+        log.add(String.format("O;%s;%s", test, message));
+    }
+
+    public static void submitFailedAssert(String message, Object expected, Object actual) {
+        log.add(String.format("X;%s;%s:\texpected: <%s>\tactual:\t<%s>", test, message, expected.toString(), actual.toString()));
+        errors.add(new ExamAssertionException(message, expected, actual));
+        hasError = true;
+    }
+
+    public static void logErrors() {
+        for (Exception error : errors) {
+            error.printStackTrace();
+        }
+    }
+
+    private static void showTestLog() {
+        for (String s : SubmissionHelper.log) {
+            if (!s.contains(test))
+                continue;
+            if (s.startsWith("X")) {
+                System.err.println("----" + s);
+            } else if (s.startsWith("S")) {
+                System.err.println("\n====================================\n" + s);
+            } else {
+                System.err.println("    " + s);
+            }
+        }
+        System.err.println("\n====================================\n\n");
+    }
+}
+
+===== File: ./test/java/mk/ukim/finki/wp/kol2025g2/AbstractPage.java =====
+package mk.ukim.finki.wp.kol2025g2;
+
+import mk.ukim.finki.wp.exam.util.ExamAssert;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.FindBy;
+
+import java.util.List;
+
+public class AbstractPage {
+
+    protected WebDriver driver;
+
+    @FindBy(tagName = "h1")
+    private List<WebElement> h1;
+
+    public AbstractPage(WebDriver driver) {
+        this.driver = driver;
+    }
+
+    public static void get(WebDriver driver, String relativeUrl) {
+        String url = System.getProperty("geb.build.baseUrl", "http://localhost:9999") + relativeUrl;
+        driver.get(url);
+    }
+
+    public static boolean assertRelativeUrl(WebDriver driver, String relativeUrl) {
+        String url = System.getProperty("geb.build.baseUrl", "http://localhost:9999") + relativeUrl;
+        String current = driver.getCurrentUrl();
+        return ExamAssert.assertUrlEquals("Requesting " + relativeUrl, url, current);
+    }
+
+    public static boolean assertAbsoluteUrl(WebDriver driver, String url) {
+        String current = driver.getCurrentUrl();
+        return ExamAssert.assertUrlEquals("Requesting " + url, url, current);
+    }
+
+    public void assertNoError() {
+        if (this.h1 != null && !this.h1.isEmpty()) {
+            String text = this.h1.get(0).getText();
+            ExamAssert.assertNotEquals("Check error", "Whitelabel Error Page", text);
+        }
+    }
+
+    public WebDriver getDriver() {
+        return driver;
+    }
+}
+
+
+===== File: ./test/java/mk/ukim/finki/wp/kol2025g2/AddOrEditSkiSlope.java =====
+package mk.ukim.finki.wp.kol2025g2;
+
+import mk.ukim.finki.wp.exam.util.ExamAssert;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.PageFactory;
+import org.openqa.selenium.support.ui.Select;
+
+public class AddOrEditSkiSlope extends AbstractPage {
+    private WebElement name;
+    private WebElement length;
+    private WebElement difficulty;
+    private WebElement skiResort;
+    private WebElement submit;
+
+    public AddOrEditSkiSlope(WebDriver driver) {
+        super(driver);
+    }
+
+    public static ItemsPage add(WebDriver driver, String addPath, String name, String length, String difficulty, String skiResort) {
+        get(driver, addPath);
+        assertRelativeUrl(driver, addPath);
+
+        AddOrEditSkiSlope addOrEditSkiSlope = PageFactory.initElements(driver, AddOrEditSkiSlope.class);
+        addOrEditSkiSlope.assertNoError();
+        addOrEditSkiSlope.name.sendKeys(name);
+        addOrEditSkiSlope.length.sendKeys(length);
+
+        Select selectSkiSlopeDifficulty = new Select(addOrEditSkiSlope.difficulty);
+        selectSkiSlopeDifficulty.selectByValue(difficulty);
+
+        Select selectSkiResort = new Select(addOrEditSkiSlope.skiResort);
+        selectSkiResort.selectByValue(skiResort);
+
+        addOrEditSkiSlope.submit.click();
+        return PageFactory.initElements(driver, ItemsPage.class);
+    }
+
+    public static AddOrEditSkiSlope getEditPage(WebDriver driver, WebElement editButton) {
+        String href = editButton.getAttribute("href");
+        System.out.println(href);
+        editButton.click();
+        assertAbsoluteUrl(driver, href);
+
+        return PageFactory.initElements(driver, AddOrEditSkiSlope.class);
+    }
+
+    public static ItemsPage update(WebDriver driver, AddOrEditSkiSlope addOrEditSkiSlope, String name, String length, String difficulty, String skiResort) {
+        addOrEditSkiSlope.name.clear();
+        addOrEditSkiSlope.name.sendKeys(name);
+        addOrEditSkiSlope.length.clear();
+        addOrEditSkiSlope.length.sendKeys(length);
+
+        Select selectSkiSlopeDifficulty = new Select(addOrEditSkiSlope.difficulty);
+        selectSkiSlopeDifficulty.selectByValue(difficulty);
+
+        Select selectSkiResort = new Select(addOrEditSkiSlope.skiResort);
+        selectSkiResort.selectByValue(skiResort);
+
+        addOrEditSkiSlope.submit.click();
+        return PageFactory.initElements(driver, ItemsPage.class);
+    }
+
+    public void assertEditFormIsPrefilled(String name, String length, String difficulty, String skiResort) {
+        ExamAssert.assertEquals("Name is not prefilled", name, this.name.getAttribute("value"));
+        ExamAssert.assertEquals("Length created is not prefilled", length, this.length.getAttribute("value"));
+        boolean checkExpenseCategory = ExamAssert.assertNotEquals("Ski slope difficulty is not preselected", 0, new Select(this.difficulty).getAllSelectedOptions().size());
+        if (checkExpenseCategory) {
+            ExamAssert.assertEquals("Ski slope difficulty is not preselected", difficulty, new Select(this.difficulty).getFirstSelectedOption().getAttribute("value"));
+        }
+
+        boolean checkVendor = ExamAssert.assertNotEquals("Ski resort is not preselected", 0, new Select(this.skiResort).getAllSelectedOptions().size());
+        if (checkVendor) {
+            ExamAssert.assertEquals("Ski resort is not preselected", skiResort, new Select(this.skiResort).getFirstSelectedOption().getAttribute("value"));
+        }
+    }
+}
+
+===== File: ./test/java/mk/ukim/finki/wp/kol2025g2/ItemsPage.java =====
+package mk.ukim.finki.wp.kol2025g2;
+
+import lombok.Getter;
+import mk.ukim.finki.wp.exam.util.ExamAssert;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.FindBy;
+import org.openqa.selenium.support.PageFactory;
+import org.openqa.selenium.support.ui.Select;
+
+import java.util.List;
+
+@Getter
+public class ItemsPage extends AbstractPage {
+
+    private WebElement name;
+    private WebElement length;
+
+    private WebElement difficulty;
+
+    private WebElement skiResort;
+
+    private WebElement filter;
+
+    @FindBy(css = "tr[class=item]")
+    private List<WebElement> rows;
+
+    @FindBy(css = ".delete-item")
+    private List<WebElement> deleteButtons;
+
+    @FindBy(className = "edit-item")
+    private List<WebElement> editButtons;
+
+    @FindBy(css = ".close-item")
+    private List<WebElement> closeButtons;
+
+    @FindBy(css = ".add-item")
+    private List<WebElement> addButton;
+
+    public ItemsPage(WebDriver driver) {
+        super(driver);
+    }
+
+    public static ItemsPage to(WebDriver driver) {
+        get(driver, "/?pageSize=20&pageNum=1");
+        return PageFactory.initElements(driver, ItemsPage.class);
+    }
+
+    public static ItemsPage to(WebDriver driver, int pageSize, int pageNum) {
+        get(driver, "/?pageSize=" + pageSize + "&pageNum=" + pageNum);
+        return PageFactory.initElements(driver, ItemsPage.class);
+    }
+
+    public ItemsPage filter(String name, String length, String difficulty, String skiResort) {
+        System.out.println(driver.getCurrentUrl());
+        this.name.sendKeys(name);
+        this.length.sendKeys(length);
+        Select selectSkiSlopeDifficulty = new Select(this.difficulty);
+        selectSkiSlopeDifficulty.selectByValue(difficulty);
+        Select selectSkiResort = new Select(this.skiResort);
+        selectSkiResort.selectByValue(skiResort);
+        this.filter.click();
+        String url = "?name=" + name + "&length=" + length + "&difficulty=" + difficulty + "&skiResort=" + skiResort;
+        if (driver.getCurrentUrl().contains("/ski-slopes")) {
+            url = "/ski-slopes" + url;
+        } else {
+            url = "/" + url;
+        }
+        assertRelativeUrl(this.driver, url.replaceAll(" ", "+"));
+        return PageFactory.initElements(driver, ItemsPage.class);
+    }
+
+    public void assertButtons(int deleteButtonsCount, int editButtonsCount, int addButtonsCount, int closeButtonsCount) {
+        ExamAssert.assertEquals("delete btn count", deleteButtonsCount, this.getDeleteButtons().size());
+        ExamAssert.assertEquals("edit btn count", editButtonsCount, this.getEditButtons().size());
+        ExamAssert.assertEquals("add btn count", addButtonsCount, this.getAddButton().size());
+        ExamAssert.assertEquals("close btn count", closeButtonsCount, this.getCloseButtons().size());
+    }
+
+    public boolean assertItems(int expectedItemsNumber) {
+        return ExamAssert.assertEquals("Number of items", expectedItemsNumber, this.getRows().size());
+    }
+}
+
+
+===== File: ./test/java/mk/ukim/finki/wp/kol2025g2/LoginPage.java =====
+package mk.ukim.finki.wp.kol2025g2;
+
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.FindBy;
+import org.openqa.selenium.support.PageFactory;
+
+public class LoginPage extends AbstractPage {
+
+    private WebElement username;
+
+    private WebElement password;
+
+    @FindBy(css = "button[type='submit']")
+    private WebElement submit;
+
+    public LoginPage(WebDriver driver) {
+        super(driver);
+    }
+
+    public static LoginPage openLogin(WebDriver driver) {
+        get(driver, "/login");
+        System.out.println(driver.getCurrentUrl());
+        return PageFactory.initElements(driver, LoginPage.class);
+    }
+
+    public static ItemsPage doLogin(WebDriver driver, LoginPage loginPage, String username, String password) {
+        loginPage.username.sendKeys(username);
+        loginPage.password.sendKeys(password);
+        loginPage.submit.click();
+        System.out.println(driver.getCurrentUrl());
+        return PageFactory.initElements(driver, ItemsPage.class);
+    }
+
+    public static LoginPage logout(WebDriver driver) {
+        get(driver, "/logout");
+        return PageFactory.initElements(driver, LoginPage.class);
+    }
+}
+
+
+===== File: ./test/java/mk/ukim/finki/wp/kol2025g2/SeleniumScenarioTest.java =====
+package mk.ukim.finki.wp.kol2025g2;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import mk.ukim.finki.wp.exam.util.CodeExtractor;
+import mk.ukim.finki.wp.exam.util.ExamAssert;
+import mk.ukim.finki.wp.exam.util.SubmissionHelper;
+import mk.ukim.finki.wp.kol2025g2.model.SkiResort;
+import mk.ukim.finki.wp.kol2025g2.model.SkiSlope;
+import mk.ukim.finki.wp.kol2025g2.model.SlopeDifficulty;
+import mk.ukim.finki.wp.kol2025g2.service.SkiResortService;
+import mk.ukim.finki.wp.kol2025g2.service.SkiSlopeService;
+import org.hamcrest.Description;
+import org.hamcrest.Matcher;
+import org.junit.jupiter.api.*;
+import org.openqa.selenium.By;
+import org.openqa.selenium.htmlunit.HtmlUnitDriver;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import org.springframework.test.web.servlet.result.MockMvcResultHandlers;
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
+
+import java.util.List;
+
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@ActiveProfiles("test")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
+public class SeleniumScenarioTest {
+
+    //TODO: CHANGE THE VALUE OF THE SubmissionHelper.index WITH YOUR INDEX NUMBER!!!
+    static {
+        SubmissionHelper.exam = "2025-k2-g2";
+        SubmissionHelper.index = "236040";
+    }
+
+    @Autowired
+    SkiResortService skiResortService;
+
+    @Autowired
+    SkiSlopeService slopeService;
+
+    @Order(1)
+    @Test
+    public void test_list_10pt() {
+        SubmissionHelper.startTest("test-list-10", 10);
+        List<SkiSlope> items = this.slopeService.listAll();
+        int itemNum = items.size();
+
+        ExamAssert.assertNotEquals("Empty db", 0, itemNum);
+
+        ItemsPage listPage = ItemsPage.to(this.driver);
+        AbstractPage.assertRelativeUrl(this.driver, BASE_DEFAULT_URL);
+        listPage.assertItems(itemNum);
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(2)
+    @Test
+    public void test_pagination_10pt() {
+        SubmissionHelper.startTest("test-pagination-10", 10);
+        int pageSize = 5;
+        int pageNum = 1;
+
+        ExamAssert.assertNotEquals("Empty db", 0, pageSize);
+
+        ItemsPage listPage = ItemsPage.to(this.driver, pageSize, pageNum);
+        AbstractPage.assertRelativeUrl(this.driver, "/?pageSize=" + pageSize + "&pageNum=" + pageNum);
+        listPage.assertItems(pageSize);
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(3)
+    @Test
+    public void test_filter_5pt() {
+        SubmissionHelper.startTest("test-filter-5", 5);
+        ItemsPage listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("", "", "", "");
+        listPage.assertItems(10);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("9", "", "", "");
+        listPage.assertItems(1);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("", "70", "", "");
+        listPage.assertItems(5);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("", "", SlopeDifficulty.RED.name(), "");
+        listPage.assertItems(3);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("", "", "", "2");
+        listPage.assertItems(3);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("Slope 10", "20", "", "");
+        listPage.assertItems(1);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("1", "", SlopeDifficulty.BLUE.name(), "");
+        listPage.assertItems(0);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("Slope 6", "", "", "3");
+        listPage.assertItems(1);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("", "30", SlopeDifficulty.RED.name(), "");
+        listPage.assertItems(2);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("", "30", "", "3");
+        listPage.assertItems(3);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("", "", SlopeDifficulty.RED.name(), "2");
+        listPage.assertItems(1);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("1", "20", SlopeDifficulty.BLACK.name(), "");
+        listPage.assertItems(1);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("6", "40", "", "3");
+        listPage.assertItems(1);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("1", "", SlopeDifficulty.RED.name(), "2");
+        listPage.assertItems(0);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("", "20", SlopeDifficulty.RED.name(), "2");
+        listPage.assertItems(1);
+
+        listPage = ItemsPage.to(this.driver);
+
+        listPage.filter("Slope 2", "30", SlopeDifficulty.RED.name(), "2");
+        listPage.assertItems(0);
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(4)
+    @Test
+    public void test_filter_service_5pt() {
+        SubmissionHelper.startTest("test-filter-service-5", 5);
+
+        ExamAssert.assertEquals("without filter", 10, this.slopeService.findPage(null, null, null, null, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by name only", 1, this.slopeService.findPage("9", null, null, null, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by length only", 5, this.slopeService.findPage(null, 70, null, null, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by difficulty only", 3, this.slopeService.findPage(null, null, SlopeDifficulty.RED, null, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by ski resort only", 3, this.slopeService.findPage(null, null, null, 2L, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by name and length", 1, this.slopeService.findPage("Slope 10", 20, null, null, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by name and difficulty", 0, this.slopeService.findPage("1", null, SlopeDifficulty.BLUE, null, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by name and ski resort", 1, this.slopeService.findPage("Slope 6", null, null, 3L, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by length and difficulty", 2, this.slopeService.findPage(null, 30, SlopeDifficulty.RED, null, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by length and ski resort", 3, this.slopeService.findPage(null, 30, null, 3L, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by difficulty and ski resort", 1, this.slopeService.findPage(null, null, SlopeDifficulty.RED, 2L, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by name, length, and difficulty", 1, this.slopeService.findPage("1", 20, SlopeDifficulty.BLACK, null, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by name, length, and ski resort", 1, this.slopeService.findPage("6", 40, null, 3L, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by name, difficulty, and ski resort", 0, this.slopeService.findPage("1", null, SlopeDifficulty.RED, 2L, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by length, difficulty, and ski resort", 1, this.slopeService.findPage(null, 20, SlopeDifficulty.RED, 2L, 0, 20).getNumberOfElements());
+        ExamAssert.assertEquals("filter by name, length, difficulty, and ski resort", 0, this.slopeService.findPage("Slope 2", 30, SlopeDifficulty.RED, 2L, 0, 20).getNumberOfElements());
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(5)
+    @Test
+    public void test_create_10pt() {
+        SubmissionHelper.startTest("test-create-10", 10);
+        List<SkiResort> resorts = this.skiResortService.listAll();
+        List<SkiSlope> slopes = this.slopeService.listAll();
+
+        int itemNum = slopes.size();
+        ItemsPage listPage = null;
+
+        try {
+            LoginPage loginPage = LoginPage.openLogin(this.driver);
+            listPage = LoginPage.doLogin(this.driver, loginPage, admin, admin);
+        } catch (Exception e) {
+        }
+
+
+        listPage = AddOrEditSkiSlope.add(this.driver, ADD_URL, "testName", "25", SlopeDifficulty.RED.name(), resorts.get(0).getId().toString());
+        AbstractPage.assertRelativeUrl(this.driver, DEFAULT_URL);
+        AbstractPage.get(this.driver, LIST_URL);
+        listPage.assertNoError();
+        listPage.assertItems(itemNum + 1);
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(6)
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN", "USER"})
+    public void test_create_mvc_10pt() throws Exception {
+        SubmissionHelper.startTest("test-create-mvc-10", 10);
+        List<SkiResort> resorts = this.skiResortService.listAll();
+        List<SkiSlope> slopes = this.slopeService.listAll();
+
+        int itemNum = slopes.size();
+
+        MockHttpServletRequestBuilder addRequest = MockMvcRequestBuilders
+                .post("/ski-slopes")
+                .param("name", "testName")
+                .param("length", "20")
+                .param("difficulty", SlopeDifficulty.RED.name())
+                .param("skiResort", resorts.get(0).getId().toString());
+
+        this.mockMvc.perform(addRequest)
+                .andDo(MockMvcResultHandlers.print())
+                .andExpect(MockMvcResultMatchers.status().is3xxRedirection())
+                .andExpect(MockMvcResultMatchers.redirectedUrl(DEFAULT_URL));
+
+        slopes = this.slopeService.listAll();
+        ExamAssert.assertEquals("Number of items", itemNum + 1, slopes.size());
+
+        addRequest = MockMvcRequestBuilders
+                .get("/ski-slopes/add");
+
+        this.mockMvc.perform(addRequest)
+                .andDo(MockMvcResultHandlers.print())
+                .andExpect(MockMvcResultMatchers.status().isOk())
+                .andExpect(MockMvcResultMatchers.view().name(new ViewMatcher("form")));
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(7)
+    @Test
+    public void test_edit_10pt() {
+        SubmissionHelper.startTest("test-edit-10", 10);
+        List<SkiResort> resorts = this.skiResortService.listAll();
+        List<SkiSlope> slopes = this.slopeService.listAll();
+
+        int itemNum = slopes.size();
+
+        ItemsPage listPage = null;
+        try {
+            LoginPage loginPage = LoginPage.openLogin(this.driver);
+            listPage = LoginPage.doLogin(this.driver, loginPage, admin, admin);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        if (!DEFAULT_URL.equals(this.driver.getCurrentUrl())) {
+            System.err.println("Reloading items page");
+            listPage = ItemsPage.to(this.driver);
+        }
+
+        AddOrEditSkiSlope editPage = AddOrEditSkiSlope.getEditPage(this.driver, listPage.getEditButtons().get(itemNum - 1));
+        SkiSlope slope = slopes.get(itemNum - 1);
+        editPage.assertEditFormIsPrefilled(slope.getName(), slope.getLength().toString(), slope.getDifficulty().name(), slope.getSkiResort().getId().toString());
+
+        listPage = AddOrEditSkiSlope.update(this.driver, editPage, "testName", "25", SlopeDifficulty.RED.name(), resorts.get(0).getId().toString());
+        listPage.assertNoError();
+
+        AbstractPage.assertRelativeUrl(this.driver, DEFAULT_URL);
+        AbstractPage.get(this.driver, LIST_URL);
+        if (listPage.assertItems(itemNum)) {
+            ExamAssert.assertEquals("The updated slope title is not as expected.", "testName", listPage.getRows().get(itemNum - 1).findElements(By.tagName("td")).get(0).getText().trim());
+        }
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(8)
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN", "USER"})
+    public void test_edit_mvc_10pt() throws Exception {
+        SubmissionHelper.startTest("test-edit-mvc-10", 10);
+        List<SkiResort> resorts = this.skiResortService.listAll();
+        List<SkiSlope> slopes = this.slopeService.listAll();
+
+        int itemNum = slopes.size();
+
+        MockHttpServletRequestBuilder request = MockMvcRequestBuilders
+                .post("/ski-slopes/" + slopes.get(itemNum - 1).getId())
+                .param("name", "testName")
+                .param("length", "25")
+                .param("difficulty", SlopeDifficulty.RED.name())
+                .param("skiResort", resorts.get(0).getId().toString());
+
+        this.mockMvc.perform(request)
+                .andDo(MockMvcResultHandlers.print())
+                .andExpect(MockMvcResultMatchers.status().is3xxRedirection())
+                .andExpect(MockMvcResultMatchers.redirectedUrl(DEFAULT_URL));
+
+        slopes = this.slopeService.listAll();
+        ExamAssert.assertEquals("Number of items", itemNum, slopes.size());
+        ExamAssert.assertEquals("The updated slope name is not as expected.", "testName", slopes.get(itemNum - 1).getName());
+        ExamAssert.assertEquals("The updated length is not as expected.", Integer.valueOf(25), slopes.get(itemNum - 1).getLength());
+        ExamAssert.assertEquals("The updated slope difficulty is not as expected.", SlopeDifficulty.RED.name(), slopes.get(itemNum - 1).getDifficulty().name());
+        ExamAssert.assertEquals("The updated slope ski center is not as expected.", resorts.get(0).getId().toString(), slopes.get(itemNum - 1).getSkiResort().getId().toString());
+
+        request = MockMvcRequestBuilders
+                .get("/ski-slopes/edit/" + slopes.get(itemNum - 1).getId());
+
+        this.mockMvc.perform(request)
+                .andDo(MockMvcResultHandlers.print())
+                .andExpect(MockMvcResultMatchers.status().isOk())
+                .andExpect(MockMvcResultMatchers.view().name(new ViewMatcher("form")));
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(9)
+    @Test
+    public void test_delete_3pt() throws Exception {
+        SubmissionHelper.startTest("test-delete-3", 3);
+        List<SkiSlope> items = this.slopeService.listAll();
+        int itemNum = items.size();
+
+        ItemsPage listPage = null;
+        try {
+            LoginPage loginPage = LoginPage.openLogin(this.driver);
+            listPage = LoginPage.doLogin(this.driver, loginPage, admin, admin);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        if (!DEFAULT_URL.equals(this.driver.getCurrentUrl())) {
+            System.err.println("Reloading items page");
+            listPage = ItemsPage.to(this.driver);
+        }
+
+        listPage.getDeleteButtons().get(itemNum - 1).click();
+        listPage.assertNoError();
+
+
+        AbstractPage.assertRelativeUrl(this.driver, DEFAULT_URL);
+        listPage = ItemsPage.to(this.driver);
+        listPage.assertItems(itemNum - 1);
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(10)
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN", "USER"})
+    public void test_delete_mvc_2pt() throws Exception {
+        SubmissionHelper.startTest("test-delete-mvc-2", 2);
+        List<SkiSlope> items = this.slopeService.listAll();
+        int itemNum = items.size();
+
+        MockHttpServletRequestBuilder request = MockMvcRequestBuilders
+                .post("/ski-slopes/delete/" + items.get(itemNum - 1).getId());
+
+        this.mockMvc.perform(request)
+                .andDo(MockMvcResultHandlers.print())
+                .andExpect(MockMvcResultMatchers.status().is3xxRedirection())
+                .andExpect(MockMvcResultMatchers.redirectedUrl(DEFAULT_URL));
+
+        items = this.slopeService.listAll();
+        ExamAssert.assertEquals("Number of items", itemNum - 1, items.size());
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(11)
+    @Test
+    public void test_security_urls_10pt() {
+        SubmissionHelper.startTest("test-security-urls-10", 10);
+        List<SkiSlope> slopes = this.slopeService.listAll();
+        String editUrl = "/ski-slopes/edit/" + slopes.get(0).getId();
+
+        ItemsPage.to(this.driver);
+        AbstractPage.assertRelativeUrl(this.driver, BASE_DEFAULT_URL);
+
+        AbstractPage.get(this.driver, DEFAULT_URL);
+        AbstractPage.assertRelativeUrl(this.driver, DEFAULT_URL);
+        AbstractPage.get(this.driver, ADD_URL);
+        AbstractPage.assertRelativeUrl(this.driver, LOGIN_URL);
+        AbstractPage.get(this.driver, editUrl);
+        AbstractPage.assertRelativeUrl(this.driver, LOGIN_URL);
+        AbstractPage.get(this.driver, "/random");
+        AbstractPage.assertRelativeUrl(this.driver, LOGIN_URL);
+
+        LoginPage loginPage = LoginPage.openLogin(this.driver);
+        LoginPage.doLogin(this.driver, loginPage, admin, admin);
+        AbstractPage.assertRelativeUrl(this.driver, DEFAULT_URL);
+
+        AbstractPage.get(this.driver, DEFAULT_URL);
+        AbstractPage.assertRelativeUrl(this.driver, DEFAULT_URL);
+
+        AbstractPage.get(this.driver, ADD_URL);
+        AbstractPage.assertRelativeUrl(this.driver, ADD_URL);
+
+        AbstractPage.get(this.driver, editUrl);
+        AbstractPage.assertRelativeUrl(this.driver, editUrl);
+
+        LoginPage.logout(this.driver);
+        AbstractPage.assertRelativeUrl(this.driver, "/");
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(12)
+    @Test
+    public void test_security_buttons_10pt() {
+        SubmissionHelper.startTest("test-security-buttons-10", 10);
+        List<SkiSlope> slopes = this.slopeService.listAll();
+        int itemNum = slopes.size();
+
+        ItemsPage skiSlopesPage = ItemsPage.to(this.driver);
+        AbstractPage.assertRelativeUrl(this.driver, BASE_DEFAULT_URL);
+        skiSlopesPage.assertButtons(0, 0, 0, 0);
+
+        LoginPage loginPage1 = LoginPage.openLogin(this.driver);
+        skiSlopesPage = LoginPage.doLogin(this.driver, loginPage1, admin, admin);
+        skiSlopesPage.assertButtons(itemNum, itemNum, 1, 10);
+        LoginPage.logout(this.driver);
+
+        LoginPage loginPage2 = LoginPage.openLogin(this.driver);
+        skiSlopesPage = LoginPage.doLogin(this.driver, loginPage2, user, user);
+        skiSlopesPage.assertButtons(0, 0, 0, 0);
+        LoginPage.logout(this.driver);
+        SubmissionHelper.endTest();
+    }
+
+    @Order(13)
+    @Test
+    public void test_close_slope_3pt() throws Exception {
+        SubmissionHelper.startTest("test-close-slope-3", 3);
+        List<SkiSlope> slopes = this.slopeService.listAll();
+
+        int itemNum = slopes.size();
+
+        ItemsPage listPage = null;
+        try {
+            LoginPage loginPage = LoginPage.openLogin(this.driver);
+            listPage = LoginPage.doLogin(this.driver, loginPage, admin, admin);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        if (!DEFAULT_URL.equals(this.driver.getCurrentUrl())) {
+            System.err.println("Reloading items page");
+            listPage = ItemsPage.to(this.driver);
+        }
+
+        listPage.getCloseButtons().get(itemNum - 1).click();
+        listPage.assertNoError();
+
+        AbstractPage.assertRelativeUrl(this.driver, DEFAULT_URL);
+        listPage = ItemsPage.to(this.driver);
+        ExamAssert.assertEquals("The close slope buttons are not as expected.", "CLOSED", listPage.getRows().get(itemNum - 1).findElements(By.tagName("td")).get(4).getText().trim());
+
+        SubmissionHelper.endTest();
+    }
+
+    @Order(14)
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN", "USER"})
+    public void test_close_mvc_2pt() throws Exception {
+        SubmissionHelper.startTest("test-close-mvc-2", 2);
+        List<SkiSlope> slopes = this.slopeService.listAll();
+
+        int itemNum = slopes.size();
+
+        MockHttpServletRequestBuilder request = MockMvcRequestBuilders
+                .post("/ski-slopes/close/" + slopes.get(0).getId());
+
+        this.mockMvc.perform(request)
+                .andDo(MockMvcResultHandlers.print())
+                .andExpect(MockMvcResultMatchers.status().is3xxRedirection())
+                .andExpect(MockMvcResultMatchers.redirectedUrl(DEFAULT_URL));
+
+        slopes = this.slopeService.listAll();
+        ExamAssert.assertEquals("First slope is now closed", true, slopes.get(0).isClosed());
+
+        SubmissionHelper.endTest();
+    }
+
+    private HtmlUnitDriver driver;
+    private MockMvc mockMvc;
+
+    private static String admin = "admin";
+    private static String user = "user";
+
+    @BeforeEach
+    public void setup(WebApplicationContext wac) {
+        this.mockMvc = MockMvcBuilders.webAppContextSetup(wac).build();
+        this.driver = new HtmlUnitDriver(true);
+    }
+
+    @AfterEach
+    public void destroy() {
+        if (this.driver != null) {
+            this.driver.close();
+        }
+    }
+
+    @AfterAll
+    public static void finalizeAndSubmit() throws JsonProcessingException {
+        CodeExtractor.submitSourcesAndLogs();
+    }
+
+    public static final String LIST_URL = "/ski-slopes?pageSize=20&pageNum=1";
+    public static final String DEFAULT_URL = "/ski-slopes";
+    public static final String BASE_DEFAULT_URL = "/?pageSize=20&pageNum=1";
+    public static final String ADD_URL = "/ski-slopes/add";
+    public static final String LOGIN_URL = "/login";
+
+    static class ViewMatcher implements Matcher<String> {
+
+        final String baseName;
+
+        ViewMatcher(String baseName) {
+            this.baseName = baseName;
+        }
+
+        @Override
+        public boolean matches(Object o) {
+            if (o instanceof String) {
+                String s = (String) o;
+                return s.startsWith(baseName);
+            }
+            return false;
+        }
+
+        @Override
+        public void describeMismatch(Object o, Description description) {
+        }
+
+        @Override
+        public void _dont_implement_Matcher___instead_extend_BaseMatcher_() {
+        }
+
+        @Override
+        public void describeTo(Description description) {
+        }
+    }
+}
+
+
