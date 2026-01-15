@@ -1,0 +1,1063 @@
+===== File: ./all_contents.txt =====
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/config/DataInitializer.java =====
+package mk.ukim.finki.wp.jan2025g1.config;
+
+import jakarta.annotation.PostConstruct;
+import mk.ukim.finki.wp.jan2025g1.model.HistoricalPeriod;
+import mk.ukim.finki.wp.jan2025g1.model.SiteLocation;
+import mk.ukim.finki.wp.jan2025g1.service.ArchaeologicalSiteService;
+import mk.ukim.finki.wp.jan2025g1.service.SiteLocationService;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+@Component
+public class DataInitializer {
+
+    private final ArchaeologicalSiteService archaeologicalSiteService;
+    private final SiteLocationService locationService;
+
+    public DataInitializer(ArchaeologicalSiteService archaeologicalSiteService, SiteLocationService locationService) {
+        this.archaeologicalSiteService = archaeologicalSiteService;
+        this.locationService = locationService;
+    }
+
+    private HistoricalPeriod randomizeHistoricalPeriod(int i) {
+        if (i % 4 == 0) return HistoricalPeriod.PREHISTORIC;
+        if (i % 4 == 1) return HistoricalPeriod.ANCIENT;
+        if (i % 4 == 2) return HistoricalPeriod.MEDIEVAL;
+        return HistoricalPeriod.RENAISSANCE;
+    }
+
+    @PostConstruct
+    public void initData() {
+        for (int i = 1; i <= 3; i++) {
+            this.locationService.create("City " + i, "Country " + i);
+        }
+
+        List<SiteLocation> locations = this.locationService.listAll();
+
+        for (int i = 1; i <= 10; i++) {
+            String name = "Archaeological Site " + i;
+            Double areaSize = 500 + (i * 100.0);
+            Double rating = 3.5 + (i * 0.2);
+            HistoricalPeriod period = this.randomizeHistoricalPeriod(i);
+            Long locationId = locations.get((i - 1) % locations.size()).getId();
+
+            this.archaeologicalSiteService.create(name, areaSize, rating, period, locationId);
+        }
+    }
+}
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/config/SecurityConfig.java =====
+package mk.ukim.finki.wp.jan2025g1.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
+import org.springframework.security.web.SecurityFilterChain;
+
+/**
+ * This class is used to configure user login on path '/login' and logout on path '/logout'.
+ * After login, the user should be redirected to the '/archaeological-sites' page. After logout,
+ * the user should be redirected to the '/' page.
+ * The public pages in the application should be '/' and '/archaeological-sites'.
+ * All other pages should be visible only for a user with admin role.
+ * Furthermore, in the "list.html" template, the 'Edit', 'Delete', 'Add' and 'Close' buttons should only be
+ * visible for a user with admin role.
+ * <p>
+ * For login inMemory users should be used. Their credentials are given below:
+ * [{
+ * username: "user",
+ * password: "user",
+ * role: "USER"
+ * },
+ * <p>
+ * {
+ * username: "admin",
+ * password: "admin",
+ * role: "ADMIN"
+ * }]
+ */
+
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+
+    /**
+     * Remove the implementation of the following method and replace it with your own code to implement the security requests.
+     * If you do not wish to implement the security requests, leave this code as it is.
+     */
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(AbstractHttpConfigurer::disable)
+                .headers(httpSecurityHeadersConfigurer ->
+                        httpSecurityHeadersConfigurer.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable)
+                )
+                .authorizeHttpRequests((requests) -> requests
+                        .requestMatchers("/**")
+                        .permitAll()
+                );
+        return http.build();
+    }
+}
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/Jan2025G1Application.java =====
+package mk.ukim.finki.wp.jan2025g1;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class Jan2025G1Application {
+
+    public static void main(String[] args) {
+        SpringApplication.run(Jan2025G1Application.class, args);
+    }
+}
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/model/ArchaeologicalSite.java =====
+package mk.ukim.finki.wp.jan2025g1.model;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@Entity
+@AllArgsConstructor
+public class ArchaeologicalSite {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String name;
+    private Double areaSize;
+    private boolean closed = false;
+    private Double rating;
+    @Enumerated(EnumType.STRING)
+    private HistoricalPeriod period;
+    @ManyToOne
+    private SiteLocation location;
+
+    public ArchaeologicalSite(String name, Double areaSize, boolean closed, Double rating, HistoricalPeriod period, SiteLocation location) {
+        this.name = name;
+        this.areaSize = areaSize;
+        this.closed = closed;
+        this.rating = rating;
+        this.period = period;
+        this.location = location;
+    }
+
+    public ArchaeologicalSite(String name, Double areaSize, Double rating, HistoricalPeriod period, SiteLocation location) {
+        this.name = name;
+        this.areaSize = areaSize;
+        this.rating = rating;
+        this.period = period;
+        this.location = location;
+    }
+}
+
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/model/exceptions/InvalidArchaeologicalSiteIdException.java =====
+package mk.ukim.finki.wp.jan2025g1.model.exceptions;
+
+public class InvalidArchaeologicalSiteIdException extends RuntimeException {
+}
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/model/exceptions/InvalidSiteLocationIdException.java =====
+package mk.ukim.finki.wp.jan2025g1.model.exceptions;
+
+public class InvalidSiteLocationIdException extends RuntimeException {
+}
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/model/HistoricalPeriod.java =====
+package mk.ukim.finki.wp.jan2025g1.model;
+
+public enum HistoricalPeriod {
+    PREHISTORIC,
+    ANCIENT,
+    MEDIEVAL,
+    RENAISSANCE
+}
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/model/SiteLocation.java =====
+package mk.ukim.finki.wp.jan2025g1.model;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@Entity
+@AllArgsConstructor
+public class SiteLocation {
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private Long id;
+    private String city;
+    private String country;
+
+    public SiteLocation(String city, String country) {
+        this.city = city;
+        this.country = country;
+    }
+}
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/repository/ArchaeologicalSiteRepository.java =====
+package mk.ukim.finki.wp.jan2025g1.repository;
+
+import mk.ukim.finki.wp.jan2025g1.model.ArchaeologicalSite;
+
+public interface ArchaeologicalSiteRepository extends JpaSpecificationRepository<ArchaeologicalSite, Long> {
+}
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/repository/JpaSpecificationRepository.java =====
+package mk.ukim.finki.wp.jan2025g1.repository;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.NoRepositoryBean;
+
+@NoRepositoryBean
+public interface JpaSpecificationRepository<T, ID> extends JpaRepository<T, ID> {
+    Page<T> findAll(Specification<T> filter, Pageable pageable);
+}
+
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/repository/SiteLocationRepository.java =====
+package mk.ukim.finki.wp.jan2025g1.repository;
+
+import mk.ukim.finki.wp.jan2025g1.model.SiteLocation;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface SiteLocationRepository extends JpaRepository<SiteLocation, Long> {
+}
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/service/ArchaeologicalSiteService.java =====
+package mk.ukim.finki.wp.jan2025g1.service;
+
+import mk.ukim.finki.wp.jan2025g1.model.ArchaeologicalSite;
+import mk.ukim.finki.wp.jan2025g1.model.HistoricalPeriod;
+import mk.ukim.finki.wp.jan2025g1.model.exceptions.InvalidArchaeologicalSiteIdException;
+import org.springframework.data.domain.Page;
+
+import java.util.List;
+
+public interface ArchaeologicalSiteService {
+
+    /**
+     * @return List of all archaeological sites in the database
+     */
+    List<ArchaeologicalSite> listAll();
+
+    /**
+     * @param id The id of the archaeological site that we want to obtain
+     * @return The archaeological site with the appropriate id
+     * @throws InvalidArchaeologicalSiteIdException when there is no archaeological site with the given id
+     */
+    ArchaeologicalSite findById(Long id);
+
+    /**
+     * This method is used to create a new archaeological site and save it in the database.
+     *
+     * @param name       The name of the archaeological site
+     * @param areaSize   The area size of the archaeological site
+     * @param rating     The rating of the archaeological site
+     * @param period     The historical period associated with the archaeological site
+     * @param locationId The id of the location where the archaeological site is found
+     * @return The archaeological site that is created. The id should be generated when the archaeological site is created.
+     */
+    ArchaeologicalSite create(String name, Double areaSize, Double rating, HistoricalPeriod period, Long locationId);
+
+    /**
+     * This method is used to update an archaeological site and save it in the database.
+     *
+     * @param id         The id of the archaeological site that is being updated
+     * @param name       The name of the archaeological site
+     * @param areaSize   The area size of the archaeological site
+     * @param rating     The rating of the archaeological site
+     * @param period     The historical period associated with the archaeological site
+     * @param locationId The id of the location of the archaeological site
+     * @return The archaeological site that is updated.
+     * @throws InvalidArchaeologicalSiteIdException when there is no archaeological site with the given id
+     */
+    ArchaeologicalSite update(Long id, String name, Double areaSize, Double rating, HistoricalPeriod period, Long locationId);
+
+    /**
+     * This method deletes an archaeological site from the database.
+     *
+     * @param id The id of the archaeological site that we want to delete
+     * @return The archaeological site that is deleted.
+     * @throws InvalidArchaeologicalSiteIdException when there is no archaeological site with the given id
+     */
+    ArchaeologicalSite delete(Long id);
+
+    /**
+     * This method closes an archaeological site.
+     *
+     * @param id The ID of the archaeological site we want to close.
+     * @return The updated archaeological site.
+     * @throws InvalidArchaeologicalSiteIdException If the archaeological site with the given ID does not exist.
+     */
+    ArchaeologicalSite close(Long id);
+
+    /**
+     * Returns a page of archaeological sites that match the given criteria.
+     *
+     * @param name     Filters archaeological sites whose names contain the specified text.
+     * @param areaSize Filters archaeological sites bigger than the specified area size.
+     * @param rating   Filters archaeological sites with a rating greater than the specified value.
+     * @param period   Filters archaeological sites based on the historical period.
+     * @param locationId Filters archaeological sites by the specified locationId.
+     * @param pageNum  The page number.
+     * @param pageSize The number of items per page.
+     * @return The page of archaeological sites that match the given criteria.
+     */
+    Page<ArchaeologicalSite> findPage(String name, Double areaSize, Double rating, HistoricalPeriod period, Long locationId, int pageNum, int pageSize);
+}
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/service/FieldFilterSpecification.java =====
+package mk.ukim.finki.wp.jan2025g1.service;
+
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Root;
+import org.springframework.data.jpa.domain.Specification;
+
+
+public class FieldFilterSpecification {
+
+    public static <T> Specification<T> filterEquals(Class<T> clazz, String field, String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        return (root, query, criteriaBuilder) -> criteriaBuilder.equal(fieldToPath(field, root), value);
+    }
+
+    public static <T, V> Specification<T> filterEqualsV(Class<T> clazz, String field, V value) {
+        if (value == null) {
+            return null;
+        }
+        return (root, query, criteriaBuilder) -> criteriaBuilder.equal(fieldToPath(field, root), value);
+    }
+
+    public static <T, V extends Comparable<V>> Specification<T> greaterThan(Class<T> clazz, String field, V value) {
+        if (value == null) {
+            return null;
+        }
+        return (root, query, criteriaBuilder) -> criteriaBuilder.greaterThan(fieldToPath(field, (Root<V>) root), value);
+    }
+
+    public static <T> Specification<T> filterEquals(Class<T> clazz, String field, Long value) {
+        if (value == null) {
+            return null;
+        }
+        return (root, query, criteriaBuilder) -> criteriaBuilder.equal(fieldToPath(field, root), value);
+    }
+
+    public static <T> Specification<T> filterContainsText(Class<T> clazz, String field, String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        return (root, query, criteriaBuilder) -> criteriaBuilder.like(
+                criteriaBuilder.lower(fieldToPath(field, (Root<String>) root)),
+                "%" + value.toLowerCase() + "%"
+        );
+    }
+
+    private static <T> Path<T> fieldToPath(String field, Root<T> root) {
+        String[] parts = field.split("\\.");
+        Path<T> res = root;
+        for (String p : parts) {
+            res = res.get(p);
+        }
+        return res;
+    }
+}
+
+
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/service/impl/ArchaeologicalSiteServiceImpl.java =====
+package mk.ukim.finki.wp.jan2025g1.service.impl;
+
+import mk.ukim.finki.wp.jan2025g1.model.ArchaeologicalSite;
+import mk.ukim.finki.wp.jan2025g1.model.HistoricalPeriod;
+import mk.ukim.finki.wp.jan2025g1.model.SiteLocation;
+import mk.ukim.finki.wp.jan2025g1.model.exceptions.InvalidArchaeologicalSiteIdException;
+import mk.ukim.finki.wp.jan2025g1.repository.ArchaeologicalSiteRepository;
+import mk.ukim.finki.wp.jan2025g1.service.ArchaeologicalSiteService;
+import mk.ukim.finki.wp.jan2025g1.service.FieldFilterSpecification;
+import mk.ukim.finki.wp.jan2025g1.service.SiteLocationService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class ArchaeologicalSiteServiceImpl implements ArchaeologicalSiteService {
+
+    private final ArchaeologicalSiteRepository archaeologicalSiteRepository;
+    private final SiteLocationService siteLocationService;
+
+    public ArchaeologicalSiteServiceImpl(ArchaeologicalSiteRepository archaeologicalSiteRepository, SiteLocationService siteLocationService) {
+        this.archaeologicalSiteRepository = archaeologicalSiteRepository;
+        this.siteLocationService = siteLocationService;
+    }
+
+    @Override
+    public List<ArchaeologicalSite> listAll() {
+        return this.archaeologicalSiteRepository.findAll();
+    }
+
+    @Override
+    public ArchaeologicalSite findById(Long id) {
+        return this.archaeologicalSiteRepository.findById(id).orElseThrow(InvalidArchaeologicalSiteIdException::new);
+    }
+
+    @Override
+    public ArchaeologicalSite create(String name, Double areaSize, Double rating, HistoricalPeriod period, Long locationId) {
+        SiteLocation location = this.siteLocationService.findById(locationId);
+        ArchaeologicalSite site = new ArchaeologicalSite(
+                name,
+                areaSize,
+                rating,
+                period,
+                location
+        );
+        return this.archaeologicalSiteRepository.save(site);
+    }
+
+    @Override
+    public ArchaeologicalSite update(Long id, String name, Double areaSize, Double rating, HistoricalPeriod period, Long locationId) {
+        ArchaeologicalSite site = this.findById(id);
+        SiteLocation location = this.siteLocationService.findById(locationId);
+
+        site.setName(name);
+        site.setAreaSize(areaSize);
+        site.setRating(rating);
+        site.setPeriod(period);
+        site.setLocation(location);
+
+        return this.archaeologicalSiteRepository.save(site);
+    }
+
+    @Override
+    public ArchaeologicalSite delete(Long id) {
+        ArchaeologicalSite site = this.findById(id);
+        this.archaeologicalSiteRepository.delete(site);
+        return site;
+    }
+
+    @Override
+    public ArchaeologicalSite close(Long id) {
+        ArchaeologicalSite site = this.findById(id);
+        site.setClosed(true);
+        return this.archaeologicalSiteRepository.save(site);
+    }
+
+    @Override
+    public Page<ArchaeologicalSite> findPage(String name, Double areaSize, Double rating, HistoricalPeriod period, Long locationId, int pageNum, int pageSize) {
+        Specification<ArchaeologicalSite> specification = Specification.allOf(
+                FieldFilterSpecification.filterContainsText(ArchaeologicalSite.class, "name", name),
+                FieldFilterSpecification.greaterThan(ArchaeologicalSite.class, "areaSize", areaSize),
+                FieldFilterSpecification.greaterThan(ArchaeologicalSite.class, "rating", rating),
+                FieldFilterSpecification.filterEqualsV(ArchaeologicalSite.class, "period", period),
+                FieldFilterSpecification.filterEquals(ArchaeologicalSite.class, "location.id", locationId)
+        );
+
+        return this.archaeologicalSiteRepository.findAll(specification, PageRequest.of(
+                pageNum,
+                pageSize
+        ));
+    }
+}
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/service/impl/SiteLocationServiceImpl.java =====
+package mk.ukim.finki.wp.jan2025g1.service.impl;
+
+import mk.ukim.finki.wp.jan2025g1.model.SiteLocation;
+import mk.ukim.finki.wp.jan2025g1.model.exceptions.InvalidSiteLocationIdException;
+import mk.ukim.finki.wp.jan2025g1.repository.SiteLocationRepository;
+import mk.ukim.finki.wp.jan2025g1.service.SiteLocationService;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class SiteLocationServiceImpl implements SiteLocationService {
+
+
+    private final SiteLocationRepository siteLocationRepository;
+
+    public SiteLocationServiceImpl(SiteLocationRepository siteLocationRepository) {
+        this.siteLocationRepository = siteLocationRepository;
+    }
+
+    @Override
+    public SiteLocation findById(Long id) {
+        return this.siteLocationRepository.findById(id).orElseThrow(InvalidSiteLocationIdException::new);
+    }
+
+    @Override
+    public List<SiteLocation> listAll() {
+        return this.siteLocationRepository.findAll();
+    }
+
+    @Override
+    public SiteLocation create(String city, String country) {
+        SiteLocation location = new SiteLocation(city, country);
+        return this.siteLocationRepository.save(location);
+    }
+}
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/service/SiteLocationService.java =====
+package mk.ukim.finki.wp.jan2025g1.service;
+
+import mk.ukim.finki.wp.jan2025g1.model.SiteLocation;
+import mk.ukim.finki.wp.jan2025g1.model.exceptions.InvalidSiteLocationIdException;
+
+import java.util.List;
+
+public interface SiteLocationService {
+
+    /**
+     * @param id The id of the location that we want to obtain
+     * @return The location with the appropriate id
+     * @throws InvalidSiteLocationIdException when there is no location with the given id
+     */
+    SiteLocation findById(Long id);
+
+    /**
+     * @return List of all locations in the database
+     */
+    List<SiteLocation> listAll();
+
+    /**
+     * This method is used to create a new location and save it in the database.
+     *
+     * @param city    The city of the location
+     * @param country The country of the location
+     * @return The location that is created. The id should be generated when the location is created.
+     */
+    SiteLocation create(String city, String country);
+}
+
+
+===== File: ./java/mk/ukim/finki/wp/jan2025g1/web/ArchaeologicalSiteController.java =====
+package mk.ukim.finki.wp.jan2025g1.web;
+
+import mk.ukim.finki.wp.jan2025g1.model.ArchaeologicalSite;
+import mk.ukim.finki.wp.jan2025g1.model.HistoricalPeriod;
+import mk.ukim.finki.wp.jan2025g1.service.ArchaeologicalSiteService;
+import mk.ukim.finki.wp.jan2025g1.service.SiteLocationService;
+import org.springframework.data.domain.Page;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+@Controller
+@RequestMapping({"/", "/archaeological-sites"})
+public class ArchaeologicalSiteController {
+
+    private final ArchaeologicalSiteService archaeologicalSiteService;
+    private final SiteLocationService siteLocationService;
+
+    public ArchaeologicalSiteController(ArchaeologicalSiteService archaeologicalSiteService, SiteLocationService siteLocationService) {
+        this.archaeologicalSiteService = archaeologicalSiteService;
+        this.siteLocationService = siteLocationService;
+    }
+
+
+    /**
+     * This method should use the "list.html" template to display all archaeological sites.
+     * The method should be mapped on paths '/' and '/archaeological-sites'.
+     * The arguments that this method takes are optional and can be 'null'.
+     * The filtered archaeological sites that are the result of the call
+     * findPage method from the ArchaeologicalSiteService should be displayed.
+     * If you want to return a paginated result, you should also pass the page number and the page size as arguments.
+     *
+     * @param name       Filters archaeological sites whose names contain the specified text
+     * @param areaSize   Filters by area size bigger than the specified value
+     * @param rating     Filters by rating greater than the specified value
+     * @param period     Filters by historical period
+     * @param locationId Filters by location
+     * @param pageNum    The page number
+     * @param pageSize   The number of items per page
+     * @return The view "list.html"
+     */
+    @GetMapping
+    public String listAll(@RequestParam(required = false) String name,
+                          @RequestParam(required = false) Double areaSize,
+                          @RequestParam(required = false) Double rating,
+                          @RequestParam(required = false) HistoricalPeriod period,
+                          @RequestParam(required = false) Long locationId,
+                          @RequestParam(defaultValue = "1") Integer pageNum,
+                          @RequestParam(defaultValue = "10") Integer pageSize,
+                          Model model) {
+        Page<ArchaeologicalSite> page = this.archaeologicalSiteService.findPage(
+                name,
+                areaSize,
+                rating,
+                period,
+                locationId,
+                pageNum - 1,
+                pageSize
+        );
+        model.addAttribute("page", page);
+        model.addAttribute("sites", page.getContent());
+        model.addAttribute("locations", this.siteLocationService.listAll());
+        model.addAttribute("historicalPeriods", HistoricalPeriod.values());
+
+        model.addAttribute("name", name);
+        model.addAttribute("areaSize", areaSize);
+        model.addAttribute("rating", rating);
+        model.addAttribute("period", period);
+        model.addAttribute("locationId", locationId);
+
+        return "list";
+
+    }
+
+    /**
+     * This method should display the "form.html" template.
+     * The method should be mapped on path '/archaeological-sites/add'.
+     *
+     * @return The view "form.html".
+     */
+    @GetMapping("/add")
+    public String showAdd(Model model) {
+        model.addAttribute("locations", this.siteLocationService.listAll());
+        model.addAttribute("historicalPeriods", HistoricalPeriod.values());
+        return "form";
+    }
+
+    /**
+     * This method should display the "form.html" template.
+     * However, in this case, all 'input' elements should be filled with the appropriate value for the archaeological site that is updated.
+     * The method should be mapped on path '/archaeological-sites/edit/[id]'.
+     *
+     * @return The view "form.html".
+     */
+    @GetMapping("/edit/{id}")
+    public String showEdit(@PathVariable Long id, Model model) {
+        ArchaeologicalSite site = this.archaeologicalSiteService.findById(id);
+
+        model.addAttribute("archaeologicalSite", site);
+        model.addAttribute("locations", this.siteLocationService.listAll());
+        model.addAttribute("historicalPeriods", HistoricalPeriod.values());
+        return "form";
+    }
+
+    /**
+     * This method should create a new archaeological site given the arguments it takes.
+     * The method should be mapped on path '/archaeological-sites'.
+     * After the archaeological site is created, all archaeological sites should be displayed.
+     *
+     * @param name       The name of the archaeological site
+     * @param areaSize   The area size
+     * @param rating     The rating of the site
+     * @param period     The historical period
+     * @param locationId The location ID
+     * @return Redirects to the list of archaeological sites
+     */
+    @PostMapping()
+    public String create(@RequestParam String name,
+                         @RequestParam Double areaSize,
+                         @RequestParam Double rating,
+                         @RequestParam HistoricalPeriod period,
+                         @RequestParam Long locationId) {
+        this.archaeologicalSiteService.create(name, areaSize, rating, period, locationId);
+        return "redirect:/archaeological-sites";
+    }
+
+    /**
+     * This method should update an existing archaeological site given the arguments it takes.
+     * The method should be mapped on path '/archaeological-sites/[id]'.
+     * After the archaeological site is updated, all archaeological sites should be displayed.
+     *
+     * @param id         The ID of the archaeological site to update
+     * @param name       The name of the archaeological site
+     * @param areaSize   The area size
+     * @param rating     The rating of the site
+     * @param period     The historical period
+     * @param locationId The location ID
+     * @return Redirects to the list of archaeological sites
+     */
+    @PostMapping("/{id}")
+    public String update(@PathVariable Long id,
+                         @RequestParam String name,
+                         @RequestParam Double areaSize,
+                         @RequestParam Double rating,
+                         @RequestParam HistoricalPeriod period,
+                         @RequestParam Long locationId) {
+        this.archaeologicalSiteService.update(id, name, areaSize, rating, period, locationId);
+        return "redirect:/archaeological-sites";
+    }
+
+    /**
+     * This method should delete the archaeological site that has the appropriate identifier.
+     * The method should be mapped on path '/archaeological-sites/delete/[id]'.
+     * After the archaeological sites is deleted, all archaeological sites should be displayed.
+     *
+     * @param id The ID of the archaeological site to delete
+     * @return Redirects to the list of archaeological sites
+     */
+    @PostMapping("/delete/{id}")
+    public String delete(@PathVariable Long id) {
+        this.archaeologicalSiteService.delete(id);
+        return "redirect:/archaeological-sites";
+    }
+
+    /**
+     * This method should close the archaeological sites that has the appropriate identifier.
+     * The method should be mapped on path '/archaeological-sites/close/[id]'.
+     * After the selected archaeological site is closed, all archaeological sites should be displayed.
+     *
+     * @param id The ID of the archaeological site to close
+     * @return Redirects to the list of archaeological sites
+     */
+    @PostMapping("/close/{id}")
+    public String close(@PathVariable Long id) {
+        this.archaeologicalSiteService.close(id);
+        return "redirect:/archaeological-sites";
+    }
+}
+
+
+
+===== File: ./printAllFiles.sh =====
+#!/bin/bash
+
+# Output file where all contents will be saved
+output_file="all_contents.txt"
+
+# Empty the output file if it exists
+> "$output_file"
+
+# Loop through all files in the current directory and subdirectories
+find . -type f | while read -r file; do
+    echo "===== File: $file =====" >> "$output_file"
+    cat "$file" >> "$output_file"
+    echo -e "\n" >> "$output_file"
+done
+
+echo "All contents have been written to $output_file"
+
+
+===== File: ./resources/application-test.properties =====
+server.port=9999
+
+===== File: ./resources/application.properties =====
+spring.application.name=jan2025-g1
+
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.username=sa
+
+spring.h2.console.path=/h2
+
+spring.jpa.show-sql=false
+spring.h2.console.enabled=true
+
+spring.thymeleaf.cache=false
+
+
+===== File: ./resources/templates/form.html =====
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Archaeological Site Form</title>
+</head>
+<body>
+<!-- The form should submit to ArchaeologicalSiteController.create or ArchaeologicalSiteController.update,
+     depending on whether we are creating or editing an archaeological site -->
+<form method="post"
+      th:action="@{${archaeologicalSite == null ? '/archaeological-sites' : '/archaeological-sites/' + archaeologicalSite.id}}">
+    <div>
+        <label for="name">Site Name</label>
+        <input type="text"
+               id="name"
+               name="name"
+               th:value="${archaeologicalSite != null ? archaeologicalSite.name : ''}"
+               required>
+    </div>
+
+    <div>
+        <label for="areaSize">Site Area Size (in square meters)</label>
+        <input type="number"
+               id="areaSize"
+               name="areaSize"
+               th:value="${archaeologicalSite != null ? archaeologicalSite.areaSize : ''}"
+               required>
+    </div>
+
+    <div>
+        <label for="rating">Site Rating</label><br/>
+        <input type="number"
+               id="rating"
+               name="rating"
+               step="0.1"
+               min="0"
+               max="10"
+               th:value="${archaeologicalSite != null ? archaeologicalSite.rating : ''}"
+               required>
+    </div>
+
+    <div>
+        <label for="period">Historical Period</label><br/>
+        <select id="period" name="period" size="5" required>
+            <!-- For each HistoricalPeriod you should have one <option> like below  -->
+            <option
+                    th:each="p : ${historicalPeriods}"
+                    th:value="${p.name()}"
+                    th:text="${p.name()}"
+                    th:selected="${archaeologicalSite!= null and archaeologicalSite.period==p}"
+            >[historicalPeriod]
+            </option>
+        </select>
+    </div>
+
+    <div>
+        <label for="location">SiteLocation</label><br/>
+        <select id="location" name="location" required size="5">
+            <!-- For each location you should have one <option> like below  -->
+            <option
+                    th:each="location : ${locations}"
+                    th:value="${location.id}"
+                    th:text="${location.city} + ' , ' + ${location.country}"
+                    th:selected="${archaeologicalSite != null and archaeologicalSite.location.id == location.id}"
+            >[location.city] , [location.country]
+            </option>
+        </select>
+    </div>
+
+    <button id="submit" type="submit">Submit</button>
+    <a id="back" href="/archaeological-sites" type="button" class="btn btn-primary">Back to Archaeological Sites</a>
+</form>
+
+<div>
+    <ul id="nav">
+        <li><a href="/">Home</a></li>
+        <li><a href="/login">Login</a></li>
+        <li><a href="/logout">Logout</a></li>
+    </ul>
+</div>
+</body>
+</html>
+
+
+===== File: ./resources/templates/list.html =====
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Archaeological Site List</title>
+</head>
+<body>
+
+<div>
+    <!-- The form below should invoke the method ArchaeologicalSiteController.listAll -->
+    <form id="filter-form" action="archaeological-sites">
+        <label for="name">Site Name</label>
+        <input id="name" type="text" name="name"/>
+
+        <label for="areaSize">Site Area Size (in square meters)</label>
+        <input id="areaSize" type="number" name="areaSize"/>
+
+        <label for="rating">Rating</label>
+        <input id="rating" type="number" step="0.1" min="0" max="10" name="rating"/>
+
+        <label for="period">Historical Period</label>
+        <select id="period" name="period">
+            <option value="">All</option>
+            <!-- For each HistoricalPeriod you should have one <option> like below  -->
+            <option
+                    th:each="p : ${historicalPeriods}"
+                    th:value="${p.name()}"
+                    th:text="${p.name()}"
+                    th:selected="${period !=null and p==period}"
+            >[historicalPeriod]
+            </option>
+        </select>
+
+        <label for="location">SiteLocation</label>
+        <select id="location" name="locationId">
+            <option value="">All</option>
+            <!-- For each location you should have one <option> like below  -->
+            <option
+                    th:each="l : ${locations}"
+                    th:value="${l.id}"
+                    th:text="${l.city}+', '+l.country"
+                    th:selected="${locationId!=null and l.id == locationId}"
+
+            >[location.city] , [location.country]
+            </option>
+        </select>
+
+        <button id="filter" type="submit">Filter</button>
+    </form>
+
+    <div>
+        <!-- ArchaeologicalSiteController.showAdd -->
+        <a class="add-item" th:href="@{/archaeological-sites/add}">Add new archaeological site</a>
+    </div>
+
+    <table>
+        <tr>
+            <th>Site Name</th>
+            <th>Area Size</th>
+            <th>Rating</th>
+            <th>Historical Period</th>
+            <th>SiteLocation</th>
+            <th>Open/Closed</th>
+            <th>Actions</th>
+        </tr>
+        <!-- For each archaeological site you should have one <tr> like below -->
+        <tr class="item" th:each="site : ${page.getContent()}">
+            <td th:text="${site.name}">[site.name]</td>
+            <td th:text="${site.areaSize}">[site.areaSize]</td>
+            <td th:text="${site.rating}">[site.rating]</td>
+            <td th:text="${site.period}">[site.period]</td>
+            <td th:text="${site.location.city}+ ',' + ${site.location.country}">[site.location.city],
+                [site.location.country]
+            </td>
+            <td th:text="${site.closed ? 'CLOSED':'OPEN'}">[site.closed] -> OPEN/CLOSED</td>
+            <td>
+                <!-- ArchaeologicalSiteController.edit -->
+                <a class="edit-item"
+                   th:href="@{/archaeological-sites/edit/{id}(id=${site.id})}">
+                    Edit</a>
+
+                <!-- ArchaeologicalSiteController.delete -->
+                <form
+                        th:action="@{/archaeological-sites/delete/{id}(id=${site.id})}">
+
+                    <button type="submit" class="delete-item">Delete</button>
+                </form>
+
+                <!-- ArchaeologicalSiteController.close -->
+                <form
+                        th:action="@{/archaeological-sites/close/{id}(id=${site.id})}">
+
+                    <button type="submit" class="close-item">Close</button>
+                </form>
+
+            </td>
+        </tr>
+    </table>
+    <div th:include="paging :: pageSection(${page})"></div>
+
+</div>
+
+<div>
+    <ul id="nav">
+        <li><a href="/">Home</a></li>
+        <li><a href="/login">Login</a></li>
+        <li><a href="/logout">Logout</a></li>
+    </ul>
+</div>
+
+</body>
+</html>
+
+
+===== File: ./resources/templates/paging.html =====
+<div th:fragment="pageSection(page)">
+    <div class="row">
+        <div class="col-8">
+            <nav aria-label="Page navigation">
+                <ul class="pagination">
+                    <li class="cursor-pointer page-item" th:classappend="${page.isFirst()} ? 'disabled' : ''">
+                        <a class="page-link" href="#" onClick="updateQueryStringParameter('pageNum', 1)">First</a>
+                    </li>
+                    <li class="page-item" th:classappend="${page.hasPrevious()} ? '': 'disabled'">
+                        <a class="page-link" href="#"
+                           onClick="updateQueryStringParameter('pageNum', this.getAttribute('page-number'))"
+                           th:page-number="${page.number}">Previous</a>
+                    </li>
+                    <li th:each="pageNum : ${#numbers.sequence(T(java.lang.Math).max(1,page.number-5), (page.totalPages == 0? 1: T(java.lang.Math).min(page.totalPages,page.number+5)))}"
+                        th:class="${page.number+1 == pageNum} ? 'page-item active' : 'page-item'">
+                        <a class="page-link" href="#"
+                           onClick="updateQueryStringParameter('pageNum', this.getAttribute('page-number'))"
+                           th:page-number="${pageNum}" th:text="${pageNum}"></a>
+                    </li>
+                    <li class="page-item" th:classappend="${page.hasNext()} ? '': 'disabled'">
+                        <a class="page-link" href="#"
+                           onClick="updateQueryStringParameter('pageNum', this.getAttribute('page-number'))"
+                           th:page-number="${page.number+2}">Next</a>
+                    </li>
+                    <li class="page-item" th:classappend="${page.isLast()} ? 'disabled' : ''">
+                        <a class="page-link" href="#"
+                           onClick="updateQueryStringParameter('pageNum', this.getAttribute('page-number'))"
+                           th:page-number="${page.totalPages}">Last</a>
+
+                    </li>
+                </ul>
+            </nav>
+        </div>
+
+        <div class="col-4">
+            <div class="d-flex align-items-center mb-3">
+                <label for="results" class="mr-2 mb-0">Results by page: </label>
+
+                <select id="results" class="form-control custom-select" style="max-width: 100px;"
+                        onchange="updateQueryStringParameter('pageSize',this.value)">
+                    <option value="10" th:selected="${page.size == 10}">10</option>
+                    <option value="20" th:selected="${page.size == 20}">20</option>
+                    <option value="50" th:selected="${page.size == 50}">50</option>
+                    <option value="100" th:selected="${page.size == 100}">100</option>
+                    <option value="1000" th:selected="${page.size == 1000}">1000</option>
+                </select>
+                <span class="ms-1 me-1"> / Total: </span>
+                <b class="ms-1" th:text="${page.totalElements}"></b>
+            </div>
+        </div>
+    </div>
+    <script th:inline="javascript">
+        function updateQueryStringParameter(key, value) {
+            var uri = window.location.href;
+            var re = new RegExp("([?&])" + key + "=.*?(&|$)", "i");
+            var separator = uri.indexOf('?') !== -1 ? "&" : "?";
+            if (uri.match(re)) {
+                uri = uri.replace(re, '$1' + key + "=" + value + '$2');
+            } else {
+                uri = uri + separator + key + "=" + value;
+            }
+            window.location = uri;
+        }
+    </script>
+
+
+</div>
+
+
